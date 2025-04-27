@@ -7,6 +7,9 @@ name = "voting-system-analysis"
 version = "0.1.0"
 description = "Voting system analysis tools"
 requires-python = ">=3.10"
+dependencies = [
+    "numpy>=2.2.5",
+]
 
 [tool.black]
 line-length = 88
@@ -15,3 +18,9 @@ include = '\.pyi?$'
 
 [tool.isort]
 profile = "black"
+
+[dependency-groups]
+dev = [
+    "black>=25.1.0",
+    "isort>=6.0.1",
+]
