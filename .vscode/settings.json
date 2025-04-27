@@ -1,13 +1,13 @@
 {
-    "python.formatting.provider": "black",
-    "python.linting.enabled": true,
-    "editor.formatOnSave": true,
-    "editor.codeActionsOnSave": {
-        "source.organizeImports": true
-    },
-    "python.analysis.typeCheckingMode": "basic",
-    "python.languageServer": "Pylance",
-    "[python]": {
-        "editor.defaultFormatter": "ms-python.black-formatter"
-    }
+  "python.formatting.provider": "black",
+  "python.linting.enabled": true,
+  "editor.formatOnSave": true,
+  "editor.codeActionsOnSave": {
+    "source.organizeImports": "explicit"
+  },
+  "python.analysis.typeCheckingMode": "basic",
+  "python.languageServer": "Pylance",
+  "[python]": {
+    "editor.defaultFormatter": "ms-python.black-formatter"
+  }
 }
