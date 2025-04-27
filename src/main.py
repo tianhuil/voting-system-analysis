@@ -139,6 +139,28 @@ class ApprovalVoter(Voter[Set[CandidateId]]):
         )
 
 
+class LimitedVoter(Voter[Set[CandidateId]]):
+    """Limited voter that selects up to max_choices candidates"""
+
+    def __init__(
+        self,
+        voter_id: str,
+        max_choices: int,
+        dim: int,
+        vector: np.ndarray | None = None,
+    ):
+        super().__init__(voter_id, dim, vector)
+        self.max_choices = max_choices
+
+    def cast_ballot(self, candidates: List[Candidate]) -> Ballot[Set[CandidateId]]:
+        ranked_candidates = rank_by_distance(self.vector, candidates)
+        chosen = ranked_candidates[: self.max_choices]
+        return Ballot(
+            voter_id=self.voter_id,
+            data={c.id for c in chosen},
+        )
+
+
 ########################################################
 # Election Implementations
 ########################################################
@@ -292,6 +314,26 @@ class ApprovalVotingElection(FPTPElection):
     name: str = "APPROVAL"
 
     pass
+
+
+class LimitedVotingElection(Election[Set[CandidateId]]):
+    """Limited Voting: Each voter can vote for up to k candidates"""
+
+    name: str = "LIMITED"
+
+    def run(self, voters: Sequence[Voter[Set[CandidateId]]]) -> List[Candidate]:
+        ballots = [v.cast_ballot(self.candidates) for v in voters]
+        votes: Dict[CandidateId, int] = {}
+
+        for ballot in ballots:
+            for cid in ballot.data:
+                votes[cid] = votes.get(cid, 0) + 1
+
+        self.rounds.append(votes)
+        sorted_candidates = sorted(
+            self.candidates, key=lambda c: votes.get(c.id, 0), reverse=True
+        )
+        return sorted_candidates[: self.winners]
 
 
 # Usage Example
