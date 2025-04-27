@@ -31,9 +31,9 @@ class Voter(ABC, Generic[BallotType]):
 
 
 class Election(ABC, Generic[BallotType]):
-    def __init__(self, candidates: List[Candidate], seats: int = 1):
+    def __init__(self, candidates: List[Candidate], winners: int = 1):
         self.candidates = candidates
-        self.seats = seats
+        self.winners = winners
         self.rounds: List[Dict] = []
 
     @abstractmethod
@@ -107,7 +107,7 @@ class FPTPElection(Election[Dict[CandidateId, int]]):
         sorted_candidates = sorted(
             self.candidates, key=lambda c: votes.get(c.id, 0), reverse=True
         )
-        return sorted_candidates[: self.seats]
+        return sorted_candidates[: self.winners]
 
 
 class RCVElection(Election[Dict[CandidateId, int]]):
@@ -118,7 +118,7 @@ class RCVElection(Election[Dict[CandidateId, int]]):
         active_candidates = set(c.id for c in self.candidates)
         winners: List[Candidate] = []
 
-        while len(winners) < self.seats and active_candidates:
+        while len(winners) < self.winners and active_candidates:
             # Count current votes
             counts: Dict[CandidateId, VoteCount] = {cid: 0 for cid in active_candidates}
             for ballot in ballots:
@@ -138,7 +138,7 @@ class RCVElection(Election[Dict[CandidateId, int]]):
             if total == 0:
                 break
 
-            if self.seats == 1:  # IRV Logic
+            if self.winners == 1:  # IRV Logic
                 majority = total / 2
                 for cid, count in counts.items():
                     if count > majority:
@@ -149,7 +149,7 @@ class RCVElection(Election[Dict[CandidateId, int]]):
                 eliminate_cid = min(counts, key=counts.get)  # type: ignore
                 active_candidates.remove(eliminate_cid)
             else:  # STV Logic
-                quota = total / (self.seats + 1) + 1
+                quota = total / (self.winners + 1) + 1
                 elected = [cid for cid, count in counts.items() if count >= quota]
 
                 if elected:
@@ -187,9 +187,9 @@ class STVElection(RCVElection):
         ballots = [v.cast_ballot(self.candidates) for v in voters]
         active_candidates = {c.id: c for c in self.candidates}
         winners: List[Candidate] = []
-        quota = len(ballots) / (self.seats + 1) + 1
+        quota = len(ballots) / (self.winners + 1) + 1
 
-        while len(winners) < self.seats and active_candidates:
+        while len(winners) < self.winners and active_candidates:
             # Count current votes
             counts: Dict[CandidateId, float] = {cid: 0.0 for cid in active_candidates}
             for ballot in ballots:
@@ -250,7 +250,7 @@ class STARVotingElection(Election[Dict[CandidateId, float]]):
         if len(self.candidates) <= 2:
             return sorted(
                 self.candidates, key=lambda c: scores.get(c.id, 0), reverse=True
-            )[: self.seats]
+            )[: self.winners]
 
         # Automatic Runoff
         top_two = sorted(scores, key=scores.get, reverse=True)[:2]  # type: ignore
@@ -294,4 +294,4 @@ if __name__ == "__main__":
         RankedVoter("v4", [3, 2]),
         RankedVoter("v5", [3, 1]),
     ]
-    stv_election = STVElection(candidates, seats=2)
+    stv_election = STVElection(candidates, winners=2)
