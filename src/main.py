@@ -31,12 +31,12 @@ class Ballot(Generic[BallotType]):
 # Abstract Classes
 @dataclass
 class Voter(ABC, Generic[BallotType]):
-    voter_id: str
+    id: str
     vector: np.typing.NDArray[np.float64]
 
     @classmethod
-    def random(cls, voter_id: str, dim: int) -> "Voter":
-        return cls(voter_id, np.random.normal(loc=0.0, scale=1.0, size=dim))
+    def random(cls, id: str, dim: int) -> "Voter":
+        return cls(id, np.random.normal(loc=0.0, scale=1.0, size=dim))
 
     @abstractmethod
     def cast_ballot(self, candidates: List[Candidate]) -> Ballot[BallotType]:
@@ -76,7 +76,7 @@ class FPTPVoter(Voter[FPTPBallot]):
     def cast_ballot(self, candidates: List[Candidate]) -> Ballot[CandidateId]:
         ranked_candidates = rank_by_distance(self.vector, candidates)
         return Ballot(
-            voter_id=self.voter_id,
+            voter_id=self.id,
             data=ranked_candidates[0].id,
         )
 
@@ -106,7 +106,7 @@ class RankedVoter(Voter[RankedBallot]):
     def cast_ballot(self, candidates: List[Candidate]) -> Ballot[RankedBallot]:
         ranked_candidates = rank_by_distance(self.vector, candidates)
         return Ballot(
-            voter_id=self.voter_id,
+            voter_id=self.id,
             data={
                 candidate.id: rank
                 for rank, candidate in enumerate(ranked_candidates, 1)
@@ -264,7 +264,7 @@ class ApprovalVoter(Voter[ApprovalBallot]):
             : int(len(ranked_candidates) * self.cutoff)
         ]
         return Ballot(
-            voter_id=self.voter_id,
+            voter_id=self.id,
             data={c.id for c in approved_candidates},
         )
 
@@ -300,7 +300,7 @@ class LimitedVoter(Voter[LimitedBallot]):
         ranked_candidates = rank_by_distance(self.vector, candidates)
         chosen = ranked_candidates[: self.max_choices]
         return Ballot(
-            voter_id=self.voter_id,
+            voter_id=self.id,
             data={c.id for c in chosen},
         )
 
