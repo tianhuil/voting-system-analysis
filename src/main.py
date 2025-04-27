@@ -29,22 +29,15 @@ class Ballot(Generic[BallotType]):
     data: BallotType
 
 
-V = TypeVar("V", bound="Voter")
-
-
-# Abstract Classes
+# Concrete Voter class (no longer abstract)
 @dataclass
-class Voter(ABC, Generic[BallotType]):
+class Voter:
     id: VoterId
     vector: np.typing.NDArray[np.float64]
 
     @classmethod
-    def random(cls: Type[V], id: VoterId, dim: int) -> V:
+    def random(cls, id: VoterId, dim: int) -> "Voter":
         return cls(id, np.random.normal(loc=0.0, scale=1.0, size=dim))
-
-    @abstractmethod
-    def cast_ballot(self, candidates: List[Candidate]) -> Ballot[BallotType]:
-        pass
 
 
 class Election(ABC, Generic[BallotType]):
@@ -54,7 +47,12 @@ class Election(ABC, Generic[BallotType]):
         self.rounds: List[Dict] = []
 
     @abstractmethod
-    def run(self, voters: Sequence[Voter[BallotType]]) -> List[Candidate]:
+    def cast_ballot(self, voter: Voter) -> Ballot[BallotType]:
+        """Cast a ballot for a voter based on the election rules"""
+        pass
+
+    @abstractmethod
+    def run(self, voters: Sequence[Voter]) -> List[Candidate]:
         pass
 
 
@@ -74,22 +72,19 @@ def rank_by_distance(
 FPTPBallot = CandidateId
 
 
-class FPTPVoter(Voter[FPTPBallot]):
-    """FPTP voter that chooses the closest candidate"""
-
-    def cast_ballot(self, candidates: List[Candidate]) -> Ballot[CandidateId]:
-        ranked_candidates = rank_by_distance(self.vector, candidates)
-        return Ballot(
-            voter_id=self.id,
-            data=ranked_candidates[0].id,
-        )
-
-
 class FPTPElection(Election[FPTPBallot]):
     name: str = "FPTP"
 
-    def run(self, voters: Sequence[Voter[FPTPBallot]]) -> List[Candidate]:
-        ballots = [v.cast_ballot(self.candidates) for v in voters]
+    def cast_ballot(self, voter: Voter) -> Ballot[CandidateId]:
+        """FPTP voter that chooses the closest candidate"""
+        ranked_candidates = rank_by_distance(voter.vector, self.candidates)
+        return Ballot(
+            voter_id=voter.id,
+            data=ranked_candidates[0].id,
+        )
+
+    def run(self, voters: Sequence[Voter]) -> List[Candidate]:
+        ballots = [self.cast_ballot(v) for v in voters]
         candidate_ids = [b.data for b in ballots]
         counts = Counter(candidate_ids)
         winner_counts = counts.most_common(self.winners)
@@ -104,25 +99,22 @@ class FPTPElection(Election[FPTPBallot]):
 RankedBallot = Dict[CandidateId, int]
 
 
-class RankedVoter(Voter[RankedBallot]):
-    """RCV/STV voter with preferences"""
+class RCVElection(Election[RankedBallot]):
+    name: str = "RCV"
 
-    def cast_ballot(self, candidates: List[Candidate]) -> Ballot[RankedBallot]:
-        ranked_candidates = rank_by_distance(self.vector, candidates)
+    def cast_ballot(self, voter: Voter) -> Ballot[RankedBallot]:
+        """RCV/STV voter with preferences"""
+        ranked_candidates = rank_by_distance(voter.vector, self.candidates)
         return Ballot(
-            voter_id=self.id,
+            voter_id=voter.id,
             data={
                 candidate.id: rank
                 for rank, candidate in enumerate(ranked_candidates, 1)
             },
         )
 
-
-class RCVElection(Election[RankedBallot]):
-    name: str = "RCV"
-
-    def run(self, voters: Sequence[Voter[RankedBallot]]) -> List[Candidate]:
-        ballots = [v.cast_ballot(self.candidates) for v in voters]
+    def run(self, voters: Sequence[Voter]) -> List[Candidate]:
+        ballots = [self.cast_ballot(v) for v in voters]
         active_candidates = set(c.id for c in self.candidates)
         winners: List[Candidate] = []
 
@@ -198,8 +190,8 @@ class STVElection(RCVElection):
 
     name: str = "STV"
 
-    def run(self, voters: Sequence[Voter[RankedBallot]]) -> List[Candidate]:
-        ballots = [v.cast_ballot(self.candidates) for v in voters]
+    def run(self, voters: Sequence[Voter]) -> List[Candidate]:
+        ballots = [self.cast_ballot(v) for v in voters]
         active_candidates = {c.id: c for c in self.candidates}
         winners: List[Candidate] = []
         quota = len(ballots) / (self.winners + 1) + 1
@@ -256,30 +248,30 @@ class STVElection(RCVElection):
 ApprovalBallot = Set[CandidateId]
 
 
-@dataclass
-class ApprovalVoter(Voter[ApprovalBallot]):
-    """Approval voter that chooses the closest candidate"""
-
-    cutoff: float
-
-    def cast_ballot(self, candidates: List[Candidate]) -> Ballot[Set[CandidateId]]:
-        ranked_candidates = rank_by_distance(self.vector, candidates)
-        approved_candidates = ranked_candidates[
-            : int(len(ranked_candidates) * self.cutoff)
-        ]
-        return Ballot(
-            voter_id=self.id,
-            data={c.id for c in approved_candidates},
-        )
-
-
 class ApprovalVotingElection(Election[ApprovalBallot]):
     """Approval voting uses same counting as FPTP but different ballots"""
 
     name: str = "APPROVAL"
 
-    def run(self, voters: Sequence[Voter[ApprovalBallot]]) -> List[Candidate]:
-        ballots = [v.cast_ballot(self.candidates) for v in voters]
+    def __init__(
+        self, candidates: List[Candidate], winners: int = 1, cutoff: float = 0.5
+    ):
+        super().__init__(candidates, winners)
+        self.cutoff = cutoff
+
+    def cast_ballot(self, voter: Voter) -> Ballot[Set[CandidateId]]:
+        """Approval voter that chooses the closest candidates up to cutoff"""
+        ranked_candidates = rank_by_distance(voter.vector, self.candidates)
+        approved_candidates = ranked_candidates[
+            : int(len(ranked_candidates) * self.cutoff)
+        ]
+        return Ballot(
+            voter_id=voter.id,
+            data={c.id for c in approved_candidates},
+        )
+
+    def run(self, voters: Sequence[Voter]) -> List[Candidate]:
+        ballots = [self.cast_ballot(v) for v in voters]
         candidate_ids = [
             candidate_id for ballot in ballots for candidate_id in ballot.data
         ]
@@ -295,27 +287,28 @@ class ApprovalVotingElection(Election[ApprovalBallot]):
 LimitedBallot = List[CandidateId]
 
 
-class LimitedVoter(Voter[LimitedBallot]):
-    """Limited voter that selects up to max_choices candidates"""
-
-    max_choices: int
-
-    def cast_ballot(self, candidates: List[Candidate]) -> Ballot[Set[CandidateId]]:
-        ranked_candidates = rank_by_distance(self.vector, candidates)
-        chosen = ranked_candidates[: self.max_choices]
-        return Ballot(
-            voter_id=self.id,
-            data={c.id for c in chosen},
-        )
-
-
 class LimitedVotingElection(Election[LimitedBallot]):
     """Limited Voting: Each voter can vote for up to k candidates"""
 
     name: str = "LIMITED"
 
-    def run(self, voters: Sequence[Voter[LimitedBallot]]) -> List[Candidate]:
-        ballots = [v.cast_ballot(self.candidates) for v in voters]
+    def __init__(
+        self, candidates: List[Candidate], winners: int = 1, max_choices: int = 3
+    ):
+        super().__init__(candidates, winners)
+        self.max_choices = max_choices
+
+    def cast_ballot(self, voter: Voter) -> Ballot[Set[CandidateId]]:
+        """Limited voter that selects up to max_choices candidates"""
+        ranked_candidates = rank_by_distance(voter.vector, self.candidates)
+        chosen = ranked_candidates[: self.max_choices]
+        return Ballot(
+            voter_id=voter.id,
+            data={c.id for c in chosen},
+        )
+
+    def run(self, voters: Sequence[Voter]) -> List[Candidate]:
+        ballots = [self.cast_ballot(v) for v in voters]
         candidate_ids = [
             candidate_id for ballot in ballots for candidate_id in ballot.data
         ]
@@ -331,7 +324,23 @@ if __name__ == "__main__":
     N_VOTERS = 10_000
     WINNERS = 2
 
-    candidates = [Candidate.random(i, DIMENSION) for i in range(1, N_CANDIDATES)]
-    voters = [RankedVoter.random(i, DIMENSION) for i in range(N_VOTERS)]
-    stv_election = STVElection(candidates, winners=2)
-    print("STV Winner:", [candidate.id for candidate in stv_election.run(voters)])
+    candidates = [Candidate.random(i, DIMENSION) for i in range(N_CANDIDATES)]
+    voters = [Voter.random(i, DIMENSION) for i in range(N_VOTERS)]
+
+    # Run elections
+    fptp_election = FPTPElection(candidates, WINNERS)
+    rcv_election = RCVElection(candidates, WINNERS)
+    stv_election = STVElection(candidates, WINNERS)
+    approval_election = ApprovalVotingElection(candidates, WINNERS)
+    limited_election = LimitedVotingElection(candidates, WINNERS)
+
+    print("FPTP Winners:", [candidate.id for candidate in fptp_election.run(voters)])
+    print("RCV Winners:", [candidate.id for candidate in rcv_election.run(voters)])
+    print("STV Winners:", [candidate.id for candidate in stv_election.run(voters)])
+    print(
+        "Approval Winners:",
+        [candidate.id for candidate in approval_election.run(voters)],
+    )
+    print(
+        "Limited Winners:", [candidate.id for candidate in limited_election.run(voters)]
+    )
