@@ -12,14 +12,6 @@ VoteCount = Union[
 ]  # New type for vote counts that can be either int or float
 
 
-class VotingSystem(Enum):
-    FPTP = "First-Past-the-Post"
-    RCV = "Ranked Choice Voting"
-    STV = "Single Transferable Vote"
-    STAR = "STAR Voting"
-    APPROVAL = "Approval Voting"
-
-
 @dataclass
 class Candidate:
     id: CandidateId
@@ -101,6 +93,8 @@ class StarVoter(Voter[Dict[CandidateId, float]]):
 
 # Election Implementations
 class FPTPElection(Election[Dict[CandidateId, int]]):
+    name: str = "FPTP"
+
     def run(self, voters: Sequence[Voter[Dict[CandidateId, int]]]) -> List[Candidate]:
         ballots = [v.cast_ballot(self.candidates) for v in voters]
         votes: Dict[CandidateId, int] = {}
@@ -118,6 +112,8 @@ class FPTPElection(Election[Dict[CandidateId, int]]):
 
 
 class RCVElection(Election[Dict[CandidateId, int]]):
+    name: str = "RCV"
+
     def run(self, voters: Sequence[Voter[Dict[CandidateId, int]]]) -> List[Candidate]:
         ballots = [v.cast_ballot(self.candidates) for v in voters]
         active_candidates = set(c.id for c in self.candidates)
@@ -186,6 +182,8 @@ class RCVElection(Election[Dict[CandidateId, int]]):
 class STVElection(RCVElection):
     """Proper STV implementation with vote transfer"""
 
+    name: str = "STV"
+
     def run(self, voters: Sequence[Voter[Dict[CandidateId, int]]]) -> List[Candidate]:
         ballots = [v.cast_ballot(self.candidates) for v in voters]
         active_candidates = {c.id: c for c in self.candidates}
@@ -237,6 +235,8 @@ class STVElection(RCVElection):
 
 
 class STARVotingElection(Election[Dict[CandidateId, float]]):
+    name: str = "STAR"
+
     def run(self, voters: Sequence[Voter[Dict[CandidateId, float]]]) -> List[Candidate]:
         ballots = [v.cast_ballot(self.candidates) for v in voters]
 
@@ -268,6 +268,8 @@ class STARVotingElection(Election[Dict[CandidateId, float]]):
 
 class ApprovalVotingElection(FPTPElection):
     """Approval voting uses same counting as FPTP but different ballots"""
+
+    name: str = "APPROVAL"
 
     pass
 
