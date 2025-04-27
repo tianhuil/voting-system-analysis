@@ -64,11 +64,6 @@ class Election(ABC, Generic[BallotType]):
         pass
 
 
-########################################################
-# Voter Implementations
-########################################################
-
-
 def rank_by_distance(
     voter_vector: np.ndarray, candidates: List[Candidate]
 ) -> List[Candidate]:
@@ -77,15 +72,9 @@ def rank_by_distance(
     )
 
 
-class RandomVoter(Voter[Dict[CandidateId, int]]):
-    """Random voter that chooses randomly"""
-
-    def cast_ballot(
-        self, candidates: List[Candidate]
-    ) -> Ballot[Dict[CandidateId, int]]:
-        # For Approval: Randomly approve 1-3 candidates
-        approved = random.sample(candidates, k=random.randint(1, 3))
-        return Ballot(voter_id=self.voter_id, data={c.id: 1 for c in approved})
+########################################################
+# First Past The Post (FPTP) System
+########################################################
 
 
 class FPTPVoter(Voter[CandidateId]):
@@ -99,71 +88,6 @@ class FPTPVoter(Voter[CandidateId]):
         )
 
 
-class RankedVoter(Voter[Dict[CandidateId, int]]):
-    """RCV/STV voter with preferences"""
-
-    def cast_ballot(
-        self, candidates: List[Candidate]
-    ) -> Ballot[Dict[CandidateId, int]]:
-        ranked_candidates = rank_by_distance(self.vector, candidates)
-        return Ballot(
-            voter_id=self.voter_id,
-            data={
-                candidate.id: rank
-                for rank, candidate in enumerate(ranked_candidates, 1)
-            },
-        )
-
-
-class ApprovalVoter(Voter[Set[CandidateId]]):
-    """Approval voter that chooses the closest candidate"""
-
-    def __init__(
-        self,
-        voter_id: str,
-        dim: int,
-        vector: np.ndarray | None = None,
-        cutoff: float = 0.5,
-    ):
-        super().__init__(voter_id, dim, vector)
-        self.cutoff = cutoff
-
-    def cast_ballot(self, candidates: List[Candidate]) -> Ballot[Set[CandidateId]]:
-        ranked_candidates = rank_by_distance(self.vector, candidates)
-        approved_candidates = ranked_candidates[
-            : int(len(ranked_candidates) * self.cutoff)
-        ]
-        return Ballot(
-            voter_id=self.voter_id,
-            data={c.id for c in approved_candidates},
-        )
-
-
-class LimitedVoter(Voter[Set[CandidateId]]):
-    """Limited voter that selects up to max_choices candidates"""
-
-    def __init__(
-        self,
-        voter_id: str,
-        max_choices: int,
-        dim: int,
-        vector: np.ndarray | None = None,
-    ):
-        super().__init__(voter_id, dim, vector)
-        self.max_choices = max_choices
-
-    def cast_ballot(self, candidates: List[Candidate]) -> Ballot[Set[CandidateId]]:
-        ranked_candidates = rank_by_distance(self.vector, candidates)
-        chosen = ranked_candidates[: self.max_choices]
-        return Ballot(
-            voter_id=self.voter_id,
-            data={c.id for c in chosen},
-        )
-
-
-########################################################
-# Election Implementations
-########################################################
 class FPTPElection(Election[Dict[CandidateId, int]]):
     name: str = "FPTP"
 
@@ -181,6 +105,27 @@ class FPTPElection(Election[Dict[CandidateId, int]]):
             self.candidates, key=lambda c: votes.get(c.id, 0), reverse=True
         )
         return sorted_candidates[: self.winners]
+
+
+########################################################
+# Ranked Choice Voting (RCV) System
+########################################################
+
+
+class RankedVoter(Voter[Dict[CandidateId, int]]):
+    """RCV/STV voter with preferences"""
+
+    def cast_ballot(
+        self, candidates: List[Candidate]
+    ) -> Ballot[Dict[CandidateId, int]]:
+        ranked_candidates = rank_by_distance(self.vector, candidates)
+        return Ballot(
+            voter_id=self.voter_id,
+            data={
+                candidate.id: rank
+                for rank, candidate in enumerate(ranked_candidates, 1)
+            },
+        )
 
 
 class RCVElection(Election[Dict[CandidateId, int]]):
@@ -253,6 +198,11 @@ class RCVElection(Election[Dict[CandidateId, int]]):
         return winners
 
 
+########################################################
+# Single Transferable Vote (STV) System
+########################################################
+
+
 class STVElection(RCVElection):
     """Proper STV implementation with vote transfer"""
 
@@ -308,12 +258,68 @@ class STVElection(RCVElection):
         return winners
 
 
+########################################################
+# Approval Voting System
+########################################################
+
+
+class ApprovalVoter(Voter[Set[CandidateId]]):
+    """Approval voter that chooses the closest candidate"""
+
+    def __init__(
+        self,
+        voter_id: str,
+        dim: int,
+        vector: np.ndarray | None = None,
+        cutoff: float = 0.5,
+    ):
+        super().__init__(voter_id, dim, vector)
+        self.cutoff = cutoff
+
+    def cast_ballot(self, candidates: List[Candidate]) -> Ballot[Set[CandidateId]]:
+        ranked_candidates = rank_by_distance(self.vector, candidates)
+        approved_candidates = ranked_candidates[
+            : int(len(ranked_candidates) * self.cutoff)
+        ]
+        return Ballot(
+            voter_id=self.voter_id,
+            data={c.id for c in approved_candidates},
+        )
+
+
 class ApprovalVotingElection(FPTPElection):
     """Approval voting uses same counting as FPTP but different ballots"""
 
     name: str = "APPROVAL"
 
     pass
+
+
+########################################################
+# Limited Voting System
+########################################################
+
+
+class LimitedVoter(Voter[Set[CandidateId]]):
+    """Limited voter that selects up to max_choices candidates"""
+
+    def __init__(
+        self,
+        voter_id: str,
+        max_choices: int,
+        dim: int,
+        vector: np.ndarray | None = None,
+    ):
+        super().__init__(voter_id, dim, vector)
+        self.max_choices = max_choices
+
+    def cast_ballot(self, candidates: List[Candidate]) -> Ballot[Set[CandidateId]]:
+        ranked_candidates = rank_by_distance(self.vector, candidates)
+        chosen = ranked_candidates[: self.max_choices]
+        return Ballot(
+            voter_id=self.voter_id,
+            data={c.id for c in chosen},
+        )
 
 
 class LimitedVotingElection(Election[Set[CandidateId]]):
@@ -334,6 +340,22 @@ class LimitedVotingElection(Election[Set[CandidateId]]):
             self.candidates, key=lambda c: votes.get(c.id, 0), reverse=True
         )
         return sorted_candidates[: self.winners]
+
+
+########################################################
+# Random Voting System
+########################################################
+
+
+class RandomVoter(Voter[Dict[CandidateId, int]]):
+    """Random voter that chooses randomly"""
+
+    def cast_ballot(
+        self, candidates: List[Candidate]
+    ) -> Ballot[Dict[CandidateId, int]]:
+        # For Approval: Randomly approve 1-3 candidates
+        approved = random.sample(candidates, k=random.randint(1, 3))
+        return Ballot(voter_id=self.voter_id, data={c.id: 1 for c in approved})
 
 
 # Usage Example
