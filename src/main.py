@@ -39,6 +39,13 @@ class Voter:
     def random(cls, id: VoterId, dim: int) -> "Voter":
         return cls(id, np.random.normal(loc=0.0, scale=1.0, size=dim))
 
+    def perturb(self, sigma: float) -> "Voter":
+        return self.__class__(
+            self.id,
+            self.vector
+            + np.random.normal(loc=0.0, scale=sigma, size=self.vector.shape),
+        )
+
 
 class Election(ABC, Generic[BallotType]):
     def __init__(self, candidates: List[Candidate], winners: int = 1):
@@ -317,30 +324,42 @@ class LimitedVotingElection(Election[LimitedBallot]):
         return [self.candidates[candidate_id] for candidate_id, _ in winner_counts]
 
 
+def run_single_winner_election(
+    election: Election,
+    true_voters: Sequence[Voter],
+    perturbed_voters: Sequence[Sequence[Voter]],
+) -> float:
+    true_winner = election.run(true_voters)[0].id
+    perturbed_winners = [election.run(voters)[0].id for voters in perturbed_voters]
+    return float(np.mean([winner == true_winner for winner in perturbed_winners]))
+
+
 # Usage Example
 if __name__ == "__main__":
     DIMENSION = 3
     N_CANDIDATES = 10
-    N_VOTERS = 10_000
-    WINNERS = 2
+    N_VOTERS = 1_000
+    WINNERS = 1
+    SIGMA = 0.4
+    ITERATIONS = 10
 
     candidates = [Candidate.random(i, DIMENSION) for i in range(N_CANDIDATES)]
     voters = [Voter.random(i, DIMENSION) for i in range(N_VOTERS)]
+    perturbed_voters = [
+        [voter.perturb(SIGMA) for voter in voters] for _ in range(ITERATIONS)
+    ]
 
-    # Run elections
-    fptp_election = FPTPElection(candidates, WINNERS)
-    rcv_election = RCVElection(candidates, WINNERS)
-    stv_election = STVElection(candidates, WINNERS)
-    approval_election = ApprovalVotingElection(candidates, WINNERS)
-    limited_election = LimitedVotingElection(candidates, WINNERS)
+    # single winner elections
+    fptp_election = FPTPElection(candidates, 1)
+    rcv_election = RCVElection(candidates, 1)
+    approval_election = ApprovalVotingElection(candidates, 1)
 
-    print("FPTP Winners:", [candidate.id for candidate in fptp_election.run(voters)])
-    print("RCV Winners:", [candidate.id for candidate in rcv_election.run(voters)])
-    print("STV Winners:", [candidate.id for candidate in stv_election.run(voters)])
     print(
-        "Approval Winners:",
-        [candidate.id for candidate in approval_election.run(voters)],
+        f"FPTP Match: {run_single_winner_election(fptp_election, voters, perturbed_voters)}"
     )
     print(
-        "Limited Winners:", [candidate.id for candidate in limited_election.run(voters)]
+        f"RCV Match: {run_single_winner_election(rcv_election, voters, perturbed_voters)}"
+    )
+    print(
+        f"Approval Match: {run_single_winner_election(approval_election, voters, perturbed_voters)}"
     )
