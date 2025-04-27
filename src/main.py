@@ -139,18 +139,6 @@ class ApprovalVoter(Voter[Set[CandidateId]]):
         )
 
 
-class StarVoter(Voter[Dict[CandidateId, float]]):
-    """STAR voter that scores candidates 0-5"""
-
-    def cast_ballot(
-        self, candidates: List[Candidate]
-    ) -> Ballot[Dict[CandidateId, float]]:
-        return Ballot(
-            voter_id=self.voter_id,
-            data={c.id: random.uniform(0, 5) for c in candidates},
-        )
-
-
 # Election Implementations
 class FPTPElection(Election[Dict[CandidateId, int]]):
     name: str = "FPTP"
@@ -296,38 +284,6 @@ class STVElection(RCVElection):
         return winners
 
 
-class STARVotingElection(Election[Dict[CandidateId, float]]):
-    name: str = "STAR"
-
-    def run(self, voters: Sequence[Voter[Dict[CandidateId, float]]]) -> List[Candidate]:
-        ballots = [v.cast_ballot(self.candidates) for v in voters]
-
-        # Scoring Round
-        scores: Dict[CandidateId, float] = {}
-        for ballot in ballots:
-            for cid, score in ballot.data.items():
-                scores[cid] = scores.get(cid, 0) + score
-
-        self.rounds.append({"scores": scores})
-
-        if len(self.candidates) <= 2:
-            return sorted(
-                self.candidates, key=lambda c: scores.get(c.id, 0), reverse=True
-            )[: self.winners]
-
-        # Automatic Runoff
-        top_two = sorted(scores, key=scores.get, reverse=True)[:2]  # type: ignore
-        runoff_counts = {cid: 0 for cid in top_two}
-
-        for ballot in ballots:
-            preferred = max(top_two, key=lambda cid: ballot.data.get(cid, 0))
-            runoff_counts[preferred] += 1
-
-        self.rounds.append({"runoff": runoff_counts})
-        winner_id = max(runoff_counts, key=runoff_counts.get)  # type: ignore
-        return [next(c for c in self.candidates if c.id == winner_id)]
-
-
 class ApprovalVotingElection(FPTPElection):
     """Approval voting uses same counting as FPTP but different ballots"""
 
@@ -343,11 +299,6 @@ if __name__ == "__main__":
         Candidate(2, 3),
         Candidate(3, 3),
     ]
-
-    # STAR Voting
-    star_voters = [StarVoter(f"v{i}", 3) for i in range(100)]
-    star_election = STARVotingElection(candidates)
-    print("STAR Winner:", star_election.run(star_voters)[0].id)
 
     # STV Election
     stv_voters = [
