@@ -139,7 +139,9 @@ class ApprovalVoter(Voter[Set[CandidateId]]):
         )
 
 
+########################################################
 # Election Implementations
+########################################################
 class FPTPElection(Election[Dict[CandidateId, int]]):
     name: str = "FPTP"
 
