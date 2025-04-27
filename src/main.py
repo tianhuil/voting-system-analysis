@@ -341,7 +341,7 @@ if __name__ == "__main__":
     N_VOTERS = 1_000
     WINNERS = 1
     SIGMA = 0.4
-    ITERATIONS = 10
+    ITERATIONS = 100
 
     candidates = [Candidate.random(i, DIMENSION) for i in range(N_CANDIDATES)]
     voters = [Voter.random(i, DIMENSION) for i in range(N_VOTERS)]
