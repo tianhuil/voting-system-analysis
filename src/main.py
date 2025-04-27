@@ -325,19 +325,12 @@ class LimitedVotingElection(Election[LimitedBallot]):
 
 # Usage Example
 if __name__ == "__main__":
-    candidates = [
-        Candidate.random(1, 3),
-        Candidate.random(2, 3),
-        Candidate.random(3, 3),
-    ]
+    N_CANDIDATES = 10
+    N_VOTERS = 10_000
+
+    candidates = [Candidate.random(i, 3) for i in range(1, 10)]
 
     # STV Election
-    stv_voters = [
-        RankedVoter.random("v1", 3),
-        RankedVoter.random("v2", 3),
-        RankedVoter.random("v3", 3),
-        RankedVoter.random("v4", 3),
-        RankedVoter.random("v5", 3),
-    ]
+    stv_voters = [RankedVoter.random(f"v{i}", 3) for i in range(N_VOTERS)]
     stv_election = STVElection(candidates, winners=2)
     print("STV Winner:", stv_election.run(stv_voters)[0].id)
