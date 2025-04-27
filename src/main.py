@@ -12,20 +12,14 @@ BallotType = TypeVar("BallotType")
 CandidateId = int
 
 
+@dataclass
 class Candidate:
     id: CandidateId
-    vector: np.ndarray
+    vector: np.typing.NDArray[np.float64]
 
-    def __init__(self, id: CandidateId, dim: int, vector: np.ndarray | None = None):
-        self.id = id
-        if vector is not None:
-            if len(vector) != dim:
-                raise ValueError(
-                    f"Vector length {len(vector)} does not match dimension {dim}"
-                )
-            self.vector = vector
-        else:
-            self.vector = np.random.normal(loc=0.0, scale=1.0, size=dim)
+    @classmethod
+    def random(cls, id: CandidateId, dim: int) -> "Candidate":
+        return cls(id, np.random.normal(loc=0.0, scale=1.0, size=dim))
 
 
 @dataclass
@@ -35,19 +29,14 @@ class Ballot(Generic[BallotType]):
 
 
 # Abstract Classes
+@dataclass
 class Voter(ABC, Generic[BallotType]):
-    vector: np.ndarray
+    voter_id: str
+    vector: np.typing.NDArray[np.float64]
 
-    def __init__(self, voter_id: str, dim: int, vector: np.ndarray | None = None):
-        self.voter_id = voter_id
-        if vector is not None:
-            if len(vector) != dim:
-                raise ValueError(
-                    f"Vector length {len(vector)} does not match dimension {dim}"
-                )
-            self.vector = vector
-        else:
-            self.vector = np.random.normal(loc=0.0, scale=1.0, size=dim)
+    @classmethod
+    def random(cls, voter_id: str, dim: int) -> "Voter":
+        return cls(voter_id, np.random.normal(loc=0.0, scale=1.0, size=dim))
 
     @abstractmethod
     def cast_ballot(self, candidates: List[Candidate]) -> Ballot[BallotType]:
@@ -263,18 +252,11 @@ class STVElection(RCVElection):
 ApprovalBallot = Set[CandidateId]
 
 
+@dataclass
 class ApprovalVoter(Voter[ApprovalBallot]):
     """Approval voter that chooses the closest candidate"""
 
-    def __init__(
-        self,
-        voter_id: str,
-        dim: int,
-        vector: np.ndarray | None = None,
-        cutoff: float = 0.5,
-    ):
-        super().__init__(voter_id, dim, vector)
-        self.cutoff = cutoff
+    cutoff: float
 
     def cast_ballot(self, candidates: List[Candidate]) -> Ballot[Set[CandidateId]]:
         ranked_candidates = rank_by_distance(self.vector, candidates)
@@ -312,15 +294,7 @@ LimitedBallot = List[CandidateId]
 class LimitedVoter(Voter[LimitedBallot]):
     """Limited voter that selects up to max_choices candidates"""
 
-    def __init__(
-        self,
-        voter_id: str,
-        max_choices: int,
-        dim: int,
-        vector: np.ndarray | None = None,
-    ):
-        super().__init__(voter_id, dim, vector)
-        self.max_choices = max_choices
+    max_choices: int
 
     def cast_ballot(self, candidates: List[Candidate]) -> Ballot[Set[CandidateId]]:
         ranked_candidates = rank_by_distance(self.vector, candidates)
@@ -349,18 +323,18 @@ class LimitedVotingElection(Election[LimitedBallot]):
 # Usage Example
 if __name__ == "__main__":
     candidates = [
-        Candidate(1, 3),
-        Candidate(2, 3),
-        Candidate(3, 3),
+        Candidate.random(1, 3),
+        Candidate.random(2, 3),
+        Candidate.random(3, 3),
     ]
 
     # STV Election
     stv_voters = [
-        RankedVoter("v1", 3, vector=np.array([1, 2])),
-        RankedVoter("v2", 3, vector=np.array([1, 3])),
-        RankedVoter("v3", 3, vector=np.array([2, 1])),
-        RankedVoter("v4", 3, vector=np.array([3, 2])),
-        RankedVoter("v5", 3, vector=np.array([3, 1])),
+        RankedVoter.random("v1", 3),
+        RankedVoter.random("v2", 3),
+        RankedVoter.random("v3", 3),
+        RankedVoter.random("v4", 3),
+        RankedVoter.random("v5", 3),
     ]
     stv_election = STVElection(candidates, winners=2)
     print("STV Winner:", stv_election.run(stv_voters)[0].id)
