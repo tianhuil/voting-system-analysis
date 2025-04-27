@@ -6,7 +6,7 @@ from typing import Dict, Generic, List, Optional, Sequence, Set, TypeVar, Union
 
 # Type Definitions
 BallotType = TypeVar("BallotType")
-CandidateId = str
+CandidateId = int
 VoteCount = Union[
     int, float
 ]  # New type for vote counts that can be either int or float
@@ -276,9 +276,9 @@ class ApprovalVotingElection(FPTPElection):
 # Usage Example
 if __name__ == "__main__":
     candidates = [
-        Candidate("1"),
-        Candidate("2"),
-        Candidate("3"),
+        Candidate(1),
+        Candidate(2),
+        Candidate(3),
     ]
 
     # STAR Voting
@@ -288,10 +288,10 @@ if __name__ == "__main__":
 
     # STV Election
     stv_voters = [
-        RankedVoter("v1", ["1", "2"]),
-        RankedVoter("v2", ["1", "3"]),
-        RankedVoter("v3", ["2", "1"]),
-        RankedVoter("v4", ["3", "2"]),
-        RankedVoter("v5", ["3", "1"]),
+        RankedVoter("v1", [1, 2]),
+        RankedVoter("v2", [1, 3]),
+        RankedVoter("v3", [2, 1]),
+        RankedVoter("v4", [3, 2]),
+        RankedVoter("v5", [3, 1]),
     ]
     stv_election = STVElection(candidates, seats=2)
