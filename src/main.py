@@ -260,7 +260,11 @@ class STVElection(RCVElection):
 ########################################################
 
 
-class ApprovalVoter(Voter[Set[CandidateId]]):
+class ApprovalBallot(Set[CandidateId]):
+    pass
+
+
+class ApprovalVoter(Voter[ApprovalBallot]):
     """Approval voter that chooses the closest candidate"""
 
     def __init__(
@@ -284,12 +288,19 @@ class ApprovalVoter(Voter[Set[CandidateId]]):
         )
 
 
-class ApprovalVotingElection(FPTPElection):
+class ApprovalVotingElection(Election[ApprovalBallot]):
     """Approval voting uses same counting as FPTP but different ballots"""
 
     name: str = "APPROVAL"
 
-    pass
+    def run(self, voters: Sequence[Voter[ApprovalBallot]]) -> List[Candidate]:
+        ballots = [v.cast_ballot(self.candidates) for v in voters]
+        candidate_ids = [
+            candidate_id for ballot in ballots for candidate_id in ballot.data
+        ]
+        counts = Counter(candidate_ids)
+        winner_counts = counts.most_common(self.winners)
+        return [self.candidates[candidate_id] for candidate_id, _ in winner_counts]
 
 
 ########################################################
