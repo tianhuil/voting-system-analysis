@@ -22,24 +22,27 @@ class VotingSystem(Enum):
     PHRAGMEN = "Phragmén's Method"
 
 
+CandidateId = int
+
+
 @dataclass
 class Candidate:
-    id: str
+    id: CandidateId
 
 
 @dataclass
 class Ballot:
     voter_id: str
-    rankings: Dict[str, int]  # candidate_id -> rank (1=first)
-    scores: Dict[str, float]  # candidate_id -> score
-    approvals: List[str]  # approved candidate_ids
+    rankings: Dict[CandidateId, int]  # candidate_id -> rank (1=first)
+    scores: Dict[CandidateId, float]  # candidate_id -> score
+    approvals: List[CandidateId]  # approved candidate_ids
 
 
 class ElectionRound:
     def __init__(self, round_num: int):
         self.round_num = round_num
         self.ballots: List[Ballot] = []
-        self.results: Dict[str, float] = {}  # candidate_id -> result_metric
+        self.results: Dict[CandidateId, float] = {}  # candidate_id -> result_metric
 
 
 class ElectionConfig:
@@ -97,7 +100,7 @@ class FPTPElection(Election):
         return True
 
     def calculate_round(self) -> ElectionRound:
-        counts: Dict[str, int] = {}
+        counts: Dict[int, int] = {}
         for ballot in self.current_round.ballots:
             top_candidate = min(ballot.rankings.items(), key=lambda x: x[1])[0]
             counts[top_candidate] = counts.get(top_candidate, 0) + 1
@@ -109,7 +112,7 @@ class FPTPElection(Election):
 class RCVElection(Election):
     def __init__(self, config: ElectionConfig):
         super().__init__(config)
-        self.eliminated: List[str] = []
+        self.eliminated: List[CandidateId] = []
 
     def add_ballot(self, ballot: Ballot) -> bool:
         if len(ballot.rankings) < 1:
@@ -119,7 +122,7 @@ class RCVElection(Election):
 
     def calculate_round(self) -> ElectionRound:
         active_candidates = set(c.id for c in self.candidates) - set(self.eliminated)
-        counts: Dict[str, int] = {cid: 0 for cid in active_candidates}
+        counts: Dict[CandidateId, int] = {cid: 0 for cid in active_candidates}
 
         for ballot in self.current_round.ballots:
             active_ranks = {
@@ -155,7 +158,7 @@ class STARVotingElection(Election):
 
     def calculate_round(self) -> ElectionRound:
         # STAR Voting Logic
-        scores: Dict[str, float] = {}
+        scores: Dict[CandidateId, float] = {}
         for ballot in self.current_round.ballots:
             for cid, score in ballot.scores.items():
                 scores[cid] = scores.get(cid, 0) + score
@@ -179,8 +182,8 @@ class STVElection(Election):
     def __init__(self, config: ElectionConfig):
         super().__init__(config)
         self.quota: float = 0
-        self.elected: List[str] = []
-        self.transfers: Dict[str, List[Ballot]] = {}
+        self.elected: List[CandidateId] = []
+        self.transfers: Dict[CandidateId, List[Ballot]] = {}
 
     def add_ballot(self, ballot: Ballot) -> bool:
         if not ballot.rankings:
@@ -193,12 +196,12 @@ class STVElection(Election):
             total = len(self.current_round.ballots)
             self.quota = total / (self.config.seats + 1) + 1
 
-        counts: Dict[str, float] = {}
+        counts: Dict[CandidateId, float] = {}
         for ballot in self.current_round.ballots:
             active = next(
                 (cid for cid in ballot.rankings if cid not in self.elected), None
             )
-            if active:
+            if active is not None:
                 counts[active] = counts.get(active, 0) + 1
 
         for cid, votes in counts.items():
@@ -217,7 +220,7 @@ class STVElection(Election):
                             ),
                             None,
                         )
-                        if next_pref:
+                        if next_pref is not None:
                             counts[next_pref] = (
                                 counts.get(next_pref, 0) + transfer_factor
                             )
@@ -245,14 +248,14 @@ class ElectionFactory:
 if __name__ == "__main__":
     config = ElectionConfig(system=VotingSystem.RCV, seats=1, districts=1, max_rounds=3)
 
+    candidates = [Candidate(1), Candidate(2)]
     election = ElectionFactory.create(config)
-    candidates = [Candidate("1"), Candidate("2")]
     election.candidates = candidates
 
-    # Add sample ballots
-    election.add_ballot(Ballot("v1", {"1": 1, "2": 2}, {}, []))
-    election.add_ballot(Ballot("v2", {"1": 1, "2": 2}, {}, []))
-    election.add_ballot(Ballot("v3", {"2": 1}, {}, []))
+    # Add sample ballots with int keys
+    election.add_ballot(Ballot("v1", {1: 1, 2: 2}, {}, []))
+    election.add_ballot(Ballot("v2", {1: 1, 2: 2}, {}, []))
+    election.add_ballot(Ballot("v3", {2: 1}, {}, []))
 
     # Run rounds
     while len(election.rounds) < config.max_rounds:
