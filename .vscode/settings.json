@@ -11,6 +11,10 @@
     "editor.defaultFormatter": "ms-python.black-formatter"
   },
   "cSpell.words": [
-    "FPTP"
+    "FPTP",
+    "isort",
+    "ndarray",
+    "numpy",
+    "setuptools"
   ]
 }
