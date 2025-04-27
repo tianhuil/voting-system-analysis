@@ -10,7 +10,7 @@ import numpy as np
 # Type Definitions
 BallotType = TypeVar("BallotType")
 CandidateId = int
-VoterId = str
+VoterId = int
 
 
 @dataclass
@@ -332,6 +332,6 @@ if __name__ == "__main__":
     candidates = [Candidate.random(i, 3) for i in range(1, 10)]
 
     # STV Election
-    stv_voters = [RankedVoter.random(f"v{i}", 3) for i in range(N_VOTERS)]
+    voters = [RankedVoter.random(i, 3) for i in range(N_VOTERS)]
     stv_election = STVElection(candidates, winners=2)
-    print("STV Winner:", stv_election.run(stv_voters)[0].id)
+    print("STV Winner:", [candidate.id for candidate in stv_election.run(voters)])
