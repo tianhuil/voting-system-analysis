@@ -10,6 +10,7 @@ import numpy as np
 # Type Definitions
 BallotType = TypeVar("BallotType")
 CandidateId = int
+VoterId = str
 
 
 @dataclass
@@ -24,7 +25,7 @@ class Candidate:
 
 @dataclass
 class Ballot(Generic[BallotType]):
-    voter_id: str
+    voter_id: VoterId
     data: BallotType
 
 
@@ -34,11 +35,11 @@ V = TypeVar("V", bound="Voter")
 # Abstract Classes
 @dataclass
 class Voter(ABC, Generic[BallotType]):
-    id: str
+    id: VoterId
     vector: np.typing.NDArray[np.float64]
 
     @classmethod
-    def random(cls: Type[V], id: str, dim: int) -> V:
+    def random(cls: Type[V], id: VoterId, dim: int) -> V:
         return cls(id, np.random.normal(loc=0.0, scale=1.0, size=dim))
 
     @abstractmethod
