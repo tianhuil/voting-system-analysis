@@ -9,7 +9,7 @@ description = "Voting system analysis tools"
 requires-python = ">=3.10"
 
 [tool.black]
-line-length = 882
+line-length = 88
 target-version = ['py310']
 include = '\.pyi?$'
 
