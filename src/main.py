@@ -1,5 +1,6 @@
 import random
 from abc import ABC, abstractmethod
+from collections import Counter
 from dataclasses import dataclass
 from enum import Enum
 from typing import Dict, Generic, List, Optional, Sequence, Set, TypeVar
@@ -77,7 +78,11 @@ def rank_by_distance(
 ########################################################
 
 
-class FPTPVoter(Voter[CandidateId]):
+class FPTPBallot(CandidateId):
+    pass
+
+
+class FPTPVoter(Voter[FPTPBallot]):
     """FPTP voter that chooses the closest candidate"""
 
     def cast_ballot(self, candidates: List[Candidate]) -> Ballot[CandidateId]:
@@ -88,23 +93,15 @@ class FPTPVoter(Voter[CandidateId]):
         )
 
 
-class FPTPElection(Election[Dict[CandidateId, int]]):
+class FPTPElection(Election[FPTPBallot]):
     name: str = "FPTP"
 
-    def run(self, voters: Sequence[Voter[Dict[CandidateId, int]]]) -> List[Candidate]:
+    def run(self, voters: Sequence[Voter[FPTPBallot]]) -> List[Candidate]:
         ballots = [v.cast_ballot(self.candidates) for v in voters]
-        votes: Dict[CandidateId, int] = {}
-
-        # Count first-choice votes (FPTP) or sum approvals (Approval)
-        for ballot in ballots:
-            for cid, value in ballot.data.items():
-                votes[cid] = votes.get(cid, 0) + value
-
-        self.rounds.append(votes)
-        sorted_candidates = sorted(
-            self.candidates, key=lambda c: votes.get(c.id, 0), reverse=True
-        )
-        return sorted_candidates[: self.winners]
+        candidate_ids = [b.data for b in ballots]
+        counts = Counter(candidate_ids)
+        winner_counts = counts.most_common(self.winners)
+        return [self.candidates[candidate_id] for candidate_id, _ in winner_counts]
 
 
 ########################################################
