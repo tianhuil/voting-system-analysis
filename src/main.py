@@ -78,8 +78,7 @@ def rank_by_distance(
 ########################################################
 
 
-class FPTPBallot(CandidateId):
-    pass
+FPTPBallot = CandidateId
 
 
 class FPTPVoter(Voter[FPTPBallot]):
@@ -109,12 +108,13 @@ class FPTPElection(Election[FPTPBallot]):
 ########################################################
 
 
-class RankedVoter(Voter[Dict[CandidateId, int]]):
+RankedBallot = Dict[CandidateId, int]
+
+
+class RankedVoter(Voter[RankedBallot]):
     """RCV/STV voter with preferences"""
 
-    def cast_ballot(
-        self, candidates: List[Candidate]
-    ) -> Ballot[Dict[CandidateId, int]]:
+    def cast_ballot(self, candidates: List[Candidate]) -> Ballot[RankedBallot]:
         ranked_candidates = rank_by_distance(self.vector, candidates)
         return Ballot(
             voter_id=self.voter_id,
@@ -125,10 +125,10 @@ class RankedVoter(Voter[Dict[CandidateId, int]]):
         )
 
 
-class RCVElection(Election[Dict[CandidateId, int]]):
+class RCVElection(Election[RankedBallot]):
     name: str = "RCV"
 
-    def run(self, voters: Sequence[Voter[Dict[CandidateId, int]]]) -> List[Candidate]:
+    def run(self, voters: Sequence[Voter[RankedBallot]]) -> List[Candidate]:
         ballots = [v.cast_ballot(self.candidates) for v in voters]
         active_candidates = set(c.id for c in self.candidates)
         winners: List[Candidate] = []
@@ -205,7 +205,7 @@ class STVElection(RCVElection):
 
     name: str = "STV"
 
-    def run(self, voters: Sequence[Voter[Dict[CandidateId, int]]]) -> List[Candidate]:
+    def run(self, voters: Sequence[Voter[RankedBallot]]) -> List[Candidate]:
         ballots = [v.cast_ballot(self.candidates) for v in voters]
         active_candidates = {c.id: c for c in self.candidates}
         winners: List[Candidate] = []
@@ -260,8 +260,7 @@ class STVElection(RCVElection):
 ########################################################
 
 
-class ApprovalBallot(Set[CandidateId]):
-    pass
+ApprovalBallot = Set[CandidateId]
 
 
 class ApprovalVoter(Voter[ApprovalBallot]):
@@ -307,8 +306,10 @@ class ApprovalVotingElection(Election[ApprovalBallot]):
 # Limited Voting System
 ########################################################
 
+LimitedBallot = List[CandidateId]
 
-class LimitedVoter(Voter[Set[CandidateId]]):
+
+class LimitedVoter(Voter[LimitedBallot]):
     """Limited voter that selects up to max_choices candidates"""
 
     def __init__(
@@ -330,40 +331,19 @@ class LimitedVoter(Voter[Set[CandidateId]]):
         )
 
 
-class LimitedVotingElection(Election[Set[CandidateId]]):
+class LimitedVotingElection(Election[LimitedBallot]):
     """Limited Voting: Each voter can vote for up to k candidates"""
 
     name: str = "LIMITED"
 
-    def run(self, voters: Sequence[Voter[Set[CandidateId]]]) -> List[Candidate]:
+    def run(self, voters: Sequence[Voter[LimitedBallot]]) -> List[Candidate]:
         ballots = [v.cast_ballot(self.candidates) for v in voters]
-        votes: Dict[CandidateId, int] = {}
-
-        for ballot in ballots:
-            for cid in ballot.data:
-                votes[cid] = votes.get(cid, 0) + 1
-
-        self.rounds.append(votes)
-        sorted_candidates = sorted(
-            self.candidates, key=lambda c: votes.get(c.id, 0), reverse=True
-        )
-        return sorted_candidates[: self.winners]
-
-
-########################################################
-# Random Voting System
-########################################################
-
-
-class RandomVoter(Voter[Dict[CandidateId, int]]):
-    """Random voter that chooses randomly"""
-
-    def cast_ballot(
-        self, candidates: List[Candidate]
-    ) -> Ballot[Dict[CandidateId, int]]:
-        # For Approval: Randomly approve 1-3 candidates
-        approved = random.sample(candidates, k=random.randint(1, 3))
-        return Ballot(voter_id=self.voter_id, data={c.id: 1 for c in approved})
+        candidate_ids = [
+            candidate_id for ballot in ballots for candidate_id in ballot.data
+        ]
+        counts = Counter(candidate_ids)
+        winner_counts = counts.most_common(self.winners)
+        return [self.candidates[candidate_id] for candidate_id, _ in winner_counts]
 
 
 # Usage Example
