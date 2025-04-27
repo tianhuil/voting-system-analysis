@@ -111,10 +111,10 @@ class FPTPElection(Election[Dict[CandidateId, int]]):
                 votes[cid] = votes.get(cid, 0) + value
 
         self.rounds.append(votes)
-        sorted_cands = sorted(
+        sorted_candidates = sorted(
             self.candidates, key=lambda c: votes.get(c.id, 0), reverse=True
         )
-        return sorted_cands[: self.seats]
+        return sorted_candidates[: self.seats]
 
 
 class RCVElection(Election[Dict[CandidateId, int]]):
@@ -151,8 +151,8 @@ class RCVElection(Election[Dict[CandidateId, int]]):
                         return winners
 
                 # Eliminate last place
-                elim_cid = min(counts, key=counts.get)  # type: ignore
-                active_candidates.remove(elim_cid)
+                eliminate_cid = min(counts, key=counts.get)  # type: ignore
+                active_candidates.remove(eliminate_cid)
             else:  # STV Logic
                 quota = total / (self.seats + 1) + 1
                 elected = [cid for cid, count in counts.items() if count >= quota]
@@ -177,8 +177,8 @@ class RCVElection(Election[Dict[CandidateId, int]]):
                             if next_pref:
                                 counts[next_pref] += transfer_factor
                 else:
-                    elim_cid = min(counts, key=counts.get)  # type: ignore
-                    active_candidates.remove(elim_cid)
+                    eliminate_cid = min(counts, key=counts.get)  # type: ignore
+                    active_candidates.remove(eliminate_cid)
 
         return winners
 
@@ -230,8 +230,8 @@ class STVElection(RCVElection):
 
             if not elected:
                 # Eliminate lowest candidate
-                elim_cid = min(counts, key=counts.get)  # type: ignore
-                active_candidates.pop(elim_cid)
+                eliminate_cid = min(counts, key=counts.get)  # type: ignore
+                active_candidates.pop(eliminate_cid)
 
         return winners
 
