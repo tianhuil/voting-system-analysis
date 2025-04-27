@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "voting-system-analysis"
+version = "0.1.0"
+description = "Voting system analysis tools"
+requires-python = ">=3.10"
+
+[tool.black]
+line-length = 882
+target-version = ['py39']
+include = '\.pyi?$'
+
+[tool.isort]
+profile = "black"
