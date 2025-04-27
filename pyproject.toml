@@ -10,7 +10,7 @@ requires-python = ">=3.10"
 
 [tool.black]
 line-length = 882
-target-version = ['py39']
+target-version = ['py310']
 include = '\.pyi?$'
 
 [tool.isort]
