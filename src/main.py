@@ -2,16 +2,29 @@ import random
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, Generic, List, Optional, Sequence, Set, TypeVar, Union
+from typing import Dict, Generic, List, Optional, Sequence, Set, TypeVar
+
+import numpy as np
 
 # Type Definitions
 BallotType = TypeVar("BallotType")
 CandidateId = int
 
 
-@dataclass
 class Candidate:
     id: CandidateId
+    vector: np.ndarray
+
+    def __init__(self, id: CandidateId, dim: int, vector: np.ndarray | None = None):
+        self.id = id
+        if vector is not None:
+            if len(vector) != dim:
+                raise ValueError(
+                    f"Vector length {len(vector)} does not match dimension {dim}"
+                )
+            self.vector = vector
+        else:
+            self.vector = np.random.normal(loc=0.0, scale=1.0, size=dim)
 
 
 @dataclass
@@ -22,6 +35,19 @@ class Ballot(Generic[BallotType]):
 
 # Abstract Classes
 class Voter(ABC, Generic[BallotType]):
+    vector: np.ndarray
+
+    def __init__(self, voter_id: str, dim: int, vector: np.ndarray | None = None):
+        self.voter_id = voter_id
+        if vector is not None:
+            if len(vector) != dim:
+                raise ValueError(
+                    f"Vector length {len(vector)} does not match dimension {dim}"
+                )
+            self.vector = vector
+        else:
+            self.vector = np.random.normal(loc=0.0, scale=1.0, size=dim)
+
     @abstractmethod
     def cast_ballot(self, candidates: List[Candidate]) -> Ballot[BallotType]:
         pass
@@ -42,9 +68,6 @@ class Election(ABC, Generic[BallotType]):
 class RandomVoter(Voter[Dict[CandidateId, int]]):
     """FPTP/Approval voter that chooses randomly"""
 
-    def __init__(self, voter_id: str):
-        self.voter_id = voter_id
-
     def cast_ballot(
         self, candidates: List[Candidate]
     ) -> Ballot[Dict[CandidateId, int]]:
@@ -56,8 +79,14 @@ class RandomVoter(Voter[Dict[CandidateId, int]]):
 class RankedVoter(Voter[Dict[CandidateId, int]]):
     """RCV/STV voter with preferences"""
 
-    def __init__(self, voter_id: str, preferences: List[CandidateId]):
-        self.voter_id = voter_id
+    def __init__(
+        self,
+        voter_id: str,
+        preferences: List[CandidateId],
+        dim: int,
+        vector: np.ndarray | None = None,
+    ):
+        super().__init__(voter_id, dim, vector)
         self.preferences = preferences
 
     def cast_ballot(
@@ -74,9 +103,6 @@ class RankedVoter(Voter[Dict[CandidateId, int]]):
 
 class StarVoter(Voter[Dict[CandidateId, float]]):
     """STAR voter that scores candidates 0-5"""
-
-    def __init__(self, voter_id: str):
-        self.voter_id = voter_id
 
     def cast_ballot(
         self, candidates: List[Candidate]
@@ -275,22 +301,22 @@ class ApprovalVotingElection(FPTPElection):
 # Usage Example
 if __name__ == "__main__":
     candidates = [
-        Candidate(1),
-        Candidate(2),
-        Candidate(3),
+        Candidate(1, 3),
+        Candidate(2, 3),
+        Candidate(3, 3),
     ]
 
     # STAR Voting
-    star_voters = [StarVoter(f"v{i}") for i in range(100)]
+    star_voters = [StarVoter(f"v{i}", 3) for i in range(100)]
     star_election = STARVotingElection(candidates)
     print("STAR Winner:", star_election.run(star_voters)[0].id)
 
     # STV Election
     stv_voters = [
-        RankedVoter("v1", [1, 2]),
-        RankedVoter("v2", [1, 3]),
-        RankedVoter("v3", [2, 1]),
-        RankedVoter("v4", [3, 2]),
-        RankedVoter("v5", [3, 1]),
+        RankedVoter("v1", [1, 2], 3),
+        RankedVoter("v2", [1, 3], 3),
+        RankedVoter("v3", [2, 1], 3),
+        RankedVoter("v4", [3, 2], 3),
+        RankedVoter("v5", [3, 1], 3),
     ]
     stv_election = STVElection(candidates, winners=2)
