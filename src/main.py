@@ -15,7 +15,6 @@ VoteCount = Union[
 @dataclass
 class Candidate:
     id: CandidateId
-    name: str
 
 
 @dataclass
@@ -277,15 +276,15 @@ class ApprovalVotingElection(FPTPElection):
 # Usage Example
 if __name__ == "__main__":
     candidates = [
-        Candidate("1", "Alice"),
-        Candidate("2", "Bob"),
-        Candidate("3", "Charlie"),
+        Candidate("1"),
+        Candidate("2"),
+        Candidate("3"),
     ]
 
     # STAR Voting
     star_voters = [StarVoter(f"v{i}") for i in range(100)]
     star_election = STARVotingElection(candidates)
-    print("STAR Winner:", star_election.run(star_voters)[0].name)
+    print("STAR Winner:", star_election.run(star_voters)[0].id)
 
     # STV Election
     stv_voters = [
