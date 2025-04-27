@@ -42,10 +42,6 @@ class Candidates:
         vectors = np.random.normal(loc=0.0, scale=1.0, size=(n_candidates, dim))
         return cls(ids, vectors)
 
-    def get_candidate(self, idx: int) -> Tuple[CandidateId, np.ndarray]:
-        """Get candidate by index"""
-        return self.ids[idx], self.vectors[idx]
-
 
 @dataclass
 class Voters:
