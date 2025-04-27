@@ -25,7 +25,6 @@ class VotingSystem(Enum):
 @dataclass
 class Candidate:
     id: str
-    name: str
 
 
 @dataclass
@@ -247,7 +246,7 @@ if __name__ == "__main__":
     config = ElectionConfig(system=VotingSystem.RCV, seats=1, districts=1, max_rounds=3)
 
     election = ElectionFactory.create(config)
-    candidates = [Candidate("1", "Alice"), Candidate("2", "Bob")]
+    candidates = [Candidate("1"), Candidate("2")]
     election.candidates = candidates
 
     # Add sample ballots
