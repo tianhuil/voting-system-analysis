@@ -1,263 +1,296 @@
+import random
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, List, Tuple
+from typing import Dict, Generic, List, Optional, Sequence, Set, TypeVar, Union
 
-
-class ElectionType(Enum):
-    SINGLE_WINNER = "single"
-    MULTI_WINNER = "multi"
-    MIXED = "mixed"
+# Type Definitions
+BallotType = TypeVar("BallotType")
+CandidateId = str
+VoteCount = Union[
+    int, float
+]  # New type for vote counts that can be either int or float
 
 
 class VotingSystem(Enum):
     FPTP = "First-Past-the-Post"
     RCV = "Ranked Choice Voting"
-    APPROVAL = "Approval"
-    STAR = "STAR Voting"
     STV = "Single Transferable Vote"
-    BORDA = "Borda Count"
-    CONDORCET = "Condorcet"
-    SCORE = "Score Voting"
-    PHRAGMEN = "Phragmén's Method"
-
-
-CandidateId = int
+    STAR = "STAR Voting"
+    APPROVAL = "Approval Voting"
 
 
 @dataclass
 class Candidate:
     id: CandidateId
+    name: str
 
 
 @dataclass
-class Ballot:
+class Ballot(Generic[BallotType]):
     voter_id: str
-    rankings: Dict[CandidateId, int]  # candidate_id -> rank (1=first)
-    scores: Dict[CandidateId, float]  # candidate_id -> score
-    approvals: List[CandidateId]  # approved candidate_ids
+    data: BallotType
 
 
-class ElectionRound:
-    def __init__(self, round_num: int):
-        self.round_num = round_num
-        self.ballots: List[Ballot] = []
-        self.results: Dict[CandidateId, float] = {}  # candidate_id -> result_metric
+# Abstract Classes
+class Voter(ABC, Generic[BallotType]):
+    @abstractmethod
+    def cast_ballot(self, candidates: List[Candidate]) -> Ballot[BallotType]:
+        pass
 
 
-class ElectionConfig:
-    def __init__(
-        self,
-        system: VotingSystem,
-        seats: int = 1,
-        districts: int = 1,
-        max_rounds: int = 1,
-        scoring_range: Tuple[int, int] = (0, 5),
-    ):
-        self.system = system
+class Election(ABC, Generic[BallotType]):
+    def __init__(self, candidates: List[Candidate], seats: int = 1):
+        self.candidates = candidates
         self.seats = seats
-        self.districts = districts
-        self.max_rounds = max_rounds
-        self.scoring_range = scoring_range
-
-
-class Election(ABC):
-    def __init__(self, config: ElectionConfig):
-        self.config = config
-        self.candidates: List[Candidate] = []
-        self.rounds: List[ElectionRound] = []
-        self.current_round = ElectionRound(1)
+        self.rounds: List[Dict] = []
 
     @abstractmethod
-    def add_ballot(self, ballot: Ballot) -> bool:
-        """Validate and add ballot to current round"""
+    def run(self, voters: Sequence[Voter[BallotType]]) -> List[Candidate]:
         pass
 
-    @abstractmethod
-    def calculate_round(self) -> ElectionRound:
-        """Process current round and return results"""
-        pass
 
-    def advance_round(self) -> ElectionRound:
-        """Finalize current round and start new one"""
-        finalized = self.calculate_round()
-        self.rounds.append(finalized)
+# Voter Implementations
+class RandomVoter(Voter[Dict[CandidateId, int]]):
+    """FPTP/Approval voter that chooses randomly"""
 
-        if len(self.rounds) < self.config.max_rounds:
-            self.current_round = ElectionRound(len(self.rounds) + 1)
+    def __init__(self, voter_id: str):
+        self.voter_id = voter_id
 
-        return finalized
-
-
-# Concrete Implementations
+    def cast_ballot(
+        self, candidates: List[Candidate]
+    ) -> Ballot[Dict[CandidateId, int]]:
+        # For Approval: Randomly approve 1-3 candidates
+        approved = random.sample(candidates, k=random.randint(1, 3))
+        return Ballot(voter_id=self.voter_id, data={c.id: 1 for c in approved})
 
 
-class FPTPElection(Election):
-    def add_ballot(self, ballot: Ballot) -> bool:
-        if not ballot.rankings:
-            return False
-        self.current_round.ballots.append(ballot)
-        return True
+class RankedVoter(Voter[Dict[CandidateId, int]]):
+    """RCV/STV voter with preferences"""
 
-    def calculate_round(self) -> ElectionRound:
-        counts: Dict[int, int] = {}
-        for ballot in self.current_round.ballots:
-            top_candidate = min(ballot.rankings.items(), key=lambda x: x[1])[0]
-            counts[top_candidate] = counts.get(top_candidate, 0) + 1
+    def __init__(self, voter_id: str, preferences: List[CandidateId]):
+        self.voter_id = voter_id
+        self.preferences = preferences
 
-        self.current_round.results = {k: float(v) for k, v in counts.items()}
-        return self.current_round
+    def cast_ballot(
+        self, candidates: List[Candidate]
+    ) -> Ballot[Dict[CandidateId, int]]:
+        remaining = [c.id for c in candidates if c.id not in self.preferences]
+        random.shuffle(remaining)
+        full_ranking = self.preferences + remaining
+        return Ballot(
+            voter_id=self.voter_id,
+            data={cid: rank for rank, cid in enumerate(full_ranking, 1)},
+        )
 
 
-class RCVElection(Election):
-    def __init__(self, config: ElectionConfig):
-        super().__init__(config)
-        self.eliminated: List[CandidateId] = []
+class StarVoter(Voter[Dict[CandidateId, float]]):
+    """STAR voter that scores candidates 0-5"""
 
-    def add_ballot(self, ballot: Ballot) -> bool:
-        if len(ballot.rankings) < 1:
-            return False
-        self.current_round.ballots.append(ballot)
-        return True
+    def __init__(self, voter_id: str):
+        self.voter_id = voter_id
 
-    def calculate_round(self) -> ElectionRound:
-        active_candidates = set(c.id for c in self.candidates) - set(self.eliminated)
-        counts: Dict[CandidateId, int] = {cid: 0 for cid in active_candidates}
+    def cast_ballot(
+        self, candidates: List[Candidate]
+    ) -> Ballot[Dict[CandidateId, float]]:
+        return Ballot(
+            voter_id=self.voter_id,
+            data={c.id: random.uniform(0, 5) for c in candidates},
+        )
 
-        for ballot in self.current_round.ballots:
-            active_ranks = {
-                cid: rank
-                for cid, rank in ballot.rankings.items()
-                if cid in active_candidates
-            }
-            if active_ranks:
-                top_candidate = min(active_ranks.items(), key=lambda x: x[1])[0]
-                counts[top_candidate] += 1
 
-        if self.config.seats == 1:  # IRV
+# Election Implementations
+class FPTPElection(Election[Dict[CandidateId, int]]):
+    def run(self, voters: Sequence[Voter[Dict[CandidateId, int]]]) -> List[Candidate]:
+        ballots = [v.cast_ballot(self.candidates) for v in voters]
+        votes: Dict[CandidateId, int] = {}
+
+        # Count first-choice votes (FPTP) or sum approvals (Approval)
+        for ballot in ballots:
+            for cid, value in ballot.data.items():
+                votes[cid] = votes.get(cid, 0) + value
+
+        self.rounds.append(votes)
+        sorted_cands = sorted(
+            self.candidates, key=lambda c: votes.get(c.id, 0), reverse=True
+        )
+        return sorted_cands[: self.seats]
+
+
+class RCVElection(Election[Dict[CandidateId, int]]):
+    def run(self, voters: Sequence[Voter[Dict[CandidateId, int]]]) -> List[Candidate]:
+        ballots = [v.cast_ballot(self.candidates) for v in voters]
+        active_candidates = set(c.id for c in self.candidates)
+        winners: List[Candidate] = []
+
+        while len(winners) < self.seats and active_candidates:
+            # Count current votes
+            counts: Dict[CandidateId, VoteCount] = {cid: 0 for cid in active_candidates}
+            for ballot in ballots:
+                valid_ranks = {
+                    cid: rank
+                    for cid, rank in ballot.data.items()
+                    if cid in active_candidates
+                }
+                if valid_ranks:
+                    top_cid = min(valid_ranks, key=valid_ranks.get)  # type: ignore
+                    counts[top_cid] += 1
+
+            self.rounds.append(counts.copy())
+
+            # Check for majority
             total = sum(counts.values())
-            for cid, votes in counts.items():
-                if votes > total / 2:
-                    self.current_round.results = {cid: float(votes)}
-                    return self.current_round
+            if total == 0:
+                break
 
-            # Eliminate last place
-            elim = min(counts.items(), key=lambda x: x[1])[0]
-            self.eliminated.append(elim)
+            if self.seats == 1:  # IRV Logic
+                majority = total / 2
+                for cid, count in counts.items():
+                    if count > majority:
+                        winners.append(next(c for c in self.candidates if c.id == cid))
+                        return winners
 
-        self.current_round.results = {k: float(v) for k, v in counts.items()}
-        return self.current_round
+                # Eliminate last place
+                elim_cid = min(counts, key=counts.get)  # type: ignore
+                active_candidates.remove(elim_cid)
+            else:  # STV Logic
+                quota = total / (self.seats + 1) + 1
+                elected = [cid for cid, count in counts.items() if count >= quota]
+
+                if elected:
+                    for cid in elected:
+                        winners.append(next(c for c in self.candidates if c.id == cid))
+                        active_candidates.remove(cid)
+
+                    # Transfer surplus votes (simplified)
+                    transfer_factor = 0.5  # Actual STV uses precise calculations
+                    for ballot in ballots:
+                        if any(cid in ballot.data for cid in elected):
+                            next_pref = next(
+                                (
+                                    cid
+                                    for cid, rank in ballot.data.items()
+                                    if cid in active_candidates
+                                ),
+                                None,
+                            )
+                            if next_pref:
+                                counts[next_pref] += transfer_factor
+                else:
+                    elim_cid = min(counts, key=counts.get)  # type: ignore
+                    active_candidates.remove(elim_cid)
+
+        return winners
 
 
-class STARVotingElection(Election):
-    def add_ballot(self, ballot: Ballot) -> bool:
-        if not ballot.scores:
-            return False
-        self.current_round.ballots.append(ballot)
-        return True
+class STVElection(RCVElection):
+    """Proper STV implementation with vote transfer"""
 
-    def calculate_round(self) -> ElectionRound:
-        # STAR Voting Logic
-        scores: Dict[CandidateId, float] = {}
-        for ballot in self.current_round.ballots:
-            for cid, score in ballot.scores.items():
-                scores[cid] = scores.get(cid, 0) + score
+    def run(self, voters: Sequence[Voter[Dict[CandidateId, int]]]) -> List[Candidate]:
+        ballots = [v.cast_ballot(self.candidates) for v in voters]
+        active_candidates = {c.id: c for c in self.candidates}
+        winners: List[Candidate] = []
+        quota = len(ballots) / (self.seats + 1) + 1
 
-        if len(self.rounds) == 0:  # First round
-            sorted_cands = sorted(scores.items(), key=lambda x: -x[1])
-            top_two = [c[0] for c in sorted_cands[:2]]
-            self.current_round.results = {cid: scores[cid] for cid in top_two}
-        else:  # Runoff
-            top_two = list(scores.keys())[:2]
-            counts = {cid: 0 for cid in top_two}
-            for ballot in self.current_round.ballots:
-                preferred = max(top_two, key=lambda cid: ballot.scores.get(cid, 0))
-                counts[preferred] += 1
-            self.current_round.results = {k: float(v) for k, v in counts.items()}
+        while len(winners) < self.seats and active_candidates:
+            # Count current votes
+            counts: Dict[CandidateId, float] = {cid: 0.0 for cid in active_candidates}
+            for ballot in ballots:
+                valid_ranks = {
+                    cid: rank
+                    for cid, rank in ballot.data.items()
+                    if cid in active_candidates
+                }
+                if valid_ranks:
+                    top_cid = min(valid_ranks, key=valid_ranks.get)  # type: ignore
+                    counts[top_cid] += 1
 
-        return self.current_round
+            self.rounds.append(counts.copy())
 
+            # Elect candidates meeting quota
+            elected = [cid for cid, count in counts.items() if count >= quota]
+            for cid in elected:
+                winners.append(active_candidates.pop(cid))
+                surplus = counts[cid] - quota
 
-class STVElection(Election):
-    def __init__(self, config: ElectionConfig):
-        super().__init__(config)
-        self.quota: float = 0
-        self.elected: List[CandidateId] = []
-        self.transfers: Dict[CandidateId, List[Ballot]] = {}
-
-    def add_ballot(self, ballot: Ballot) -> bool:
-        if not ballot.rankings:
-            return False
-        self.current_round.ballots.append(ballot)
-        return True
-
-    def calculate_round(self) -> ElectionRound:
-        if not self.quota:
-            total = len(self.current_round.ballots)
-            self.quota = total / (self.config.seats + 1) + 1
-
-        counts: Dict[CandidateId, float] = {}
-        for ballot in self.current_round.ballots:
-            active = next(
-                (cid for cid in ballot.rankings if cid not in self.elected), None
-            )
-            if active is not None:
-                counts[active] = counts.get(active, 0) + 1
-
-        for cid, votes in counts.items():
-            if votes >= self.quota:
-                self.elected.append(cid)
-                surplus = votes - self.quota
-                transfer_factor = surplus / votes
-                # Simplified transfer logic
-                for ballot in self.current_round.ballots:
-                    if ballot.rankings.get(cid, 0) == 1:
+                # Transfer surplus votes
+                transfer_factor = surplus / counts[cid]
+                for ballot in ballots:
+                    if ballot.data.get(cid, 0) == 1:  # First preference
                         next_pref = next(
                             (
                                 cid
-                                for cid, rank in ballot.rankings.items()
-                                if cid not in self.elected and rank > 1
+                                for cid, rank in ballot.data.items()
+                                if cid in active_candidates
                             ),
                             None,
                         )
-                        if next_pref is not None:
-                            counts[next_pref] = (
-                                counts.get(next_pref, 0) + transfer_factor
-                            )
+                        if next_pref:
+                            counts[next_pref] += transfer_factor
 
-        self.current_round.results = {k: float(v) for k, v in counts.items()}
-        return self.current_round
+            if not elected:
+                # Eliminate lowest candidate
+                elim_cid = min(counts, key=counts.get)  # type: ignore
+                active_candidates.pop(elim_cid)
+
+        return winners
 
 
-# Factory and Type Checking
+class STARVotingElection(Election[Dict[CandidateId, float]]):
+    def run(self, voters: Sequence[Voter[Dict[CandidateId, float]]]) -> List[Candidate]:
+        ballots = [v.cast_ballot(self.candidates) for v in voters]
+
+        # Scoring Round
+        scores: Dict[CandidateId, float] = {}
+        for ballot in ballots:
+            for cid, score in ballot.data.items():
+                scores[cid] = scores.get(cid, 0) + score
+
+        self.rounds.append({"scores": scores})
+
+        if len(self.candidates) <= 2:
+            return sorted(
+                self.candidates, key=lambda c: scores.get(c.id, 0), reverse=True
+            )[: self.seats]
+
+        # Automatic Runoff
+        top_two = sorted(scores, key=scores.get, reverse=True)[:2]  # type: ignore
+        runoff_counts = {cid: 0 for cid in top_two}
+
+        for ballot in ballots:
+            preferred = max(top_two, key=lambda cid: ballot.data.get(cid, 0))
+            runoff_counts[preferred] += 1
+
+        self.rounds.append({"runoff": runoff_counts})
+        winner_id = max(runoff_counts, key=runoff_counts.get)  # type: ignore
+        return [next(c for c in self.candidates if c.id == winner_id)]
 
 
-class ElectionFactory:
-    @staticmethod
-    def create(config: ElectionConfig) -> Election:
-        systems = {
-            VotingSystem.FPTP: FPTPElection,
-            VotingSystem.RCV: RCVElection,
-            VotingSystem.STAR: STARVotingElection,
-            VotingSystem.STV: STVElection,
-        }
-        return systems[config.system](config)
+class ApprovalVotingElection(FPTPElection):
+    """Approval voting uses same counting as FPTP but different ballots"""
+
+    pass
 
 
 # Usage Example
 if __name__ == "__main__":
-    config = ElectionConfig(system=VotingSystem.RCV, seats=1, districts=1, max_rounds=3)
+    candidates = [
+        Candidate("1", "Alice"),
+        Candidate("2", "Bob"),
+        Candidate("3", "Charlie"),
+    ]
 
-    candidates = [Candidate(1), Candidate(2)]
-    election = ElectionFactory.create(config)
-    election.candidates = candidates
+    # STAR Voting
+    star_voters = [StarVoter(f"v{i}") for i in range(100)]
+    star_election = STARVotingElection(candidates)
+    print("STAR Winner:", star_election.run(star_voters)[0].name)
 
-    # Add sample ballots with int keys
-    election.add_ballot(Ballot("v1", {1: 1, 2: 2}, {}, []))
-    election.add_ballot(Ballot("v2", {1: 1, 2: 2}, {}, []))
-    election.add_ballot(Ballot("v3", {2: 1}, {}, []))
-
-    # Run rounds
-    while len(election.rounds) < config.max_rounds:
-        result = election.advance_round()
-        print(f"Round {result.round_num} Results: {result.results}")
+    # STV Election
+    stv_voters = [
+        RankedVoter("v1", ["1", "2"]),
+        RankedVoter("v2", ["1", "3"]),
+        RankedVoter("v3", ["2", "1"]),
+        RankedVoter("v4", ["3", "2"]),
+        RankedVoter("v5", ["3", "1"]),
+    ]
+    stv_election = STVElection(candidates, seats=2)
