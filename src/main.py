@@ -64,9 +64,21 @@ class Election(ABC, Generic[BallotType]):
         pass
 
 
+########################################################
 # Voter Implementations
+########################################################
+
+
+def rank_by_distance(
+    voter_vector: np.ndarray, candidates: List[Candidate]
+) -> List[Candidate]:
+    return sorted(
+        candidates, key=lambda c: float(np.linalg.norm(voter_vector - c.vector))
+    )
+
+
 class RandomVoter(Voter[Dict[CandidateId, int]]):
-    """FPTP/Approval voter that chooses randomly"""
+    """Random voter that chooses randomly"""
 
     def cast_ballot(
         self, candidates: List[Candidate]
@@ -76,32 +88,54 @@ class RandomVoter(Voter[Dict[CandidateId, int]]):
         return Ballot(voter_id=self.voter_id, data={c.id: 1 for c in approved})
 
 
+class FPTPVoter(Voter[CandidateId]):
+    """FPTP voter that chooses the closest candidate"""
+
+    def cast_ballot(self, candidates: List[Candidate]) -> Ballot[CandidateId]:
+        ranked_candidates = rank_by_distance(self.vector, candidates)
+        return Ballot(
+            voter_id=self.voter_id,
+            data=ranked_candidates[0].id,
+        )
+
+
 class RankedVoter(Voter[Dict[CandidateId, int]]):
     """RCV/STV voter with preferences"""
-
-    def __init__(
-        self,
-        voter_id: str,
-        preferences: List[CandidateId],
-        dim: int,
-        vector: np.ndarray | None = None,
-    ):
-        super().__init__(voter_id, dim, vector)
-        self.preferences = preferences
 
     def cast_ballot(
         self, candidates: List[Candidate]
     ) -> Ballot[Dict[CandidateId, int]]:
-        # Rank candidates by distance (closest first)
-        ranked_candidates = sorted(
-            candidates, key=lambda c: float(np.linalg.norm(self.vector - c.vector))
-        )
+        ranked_candidates = rank_by_distance(self.vector, candidates)
         return Ballot(
             voter_id=self.voter_id,
             data={
                 candidate.id: rank
                 for rank, candidate in enumerate(ranked_candidates, 1)
             },
+        )
+
+
+class ApprovalVoter(Voter[Set[CandidateId]]):
+    """Approval voter that chooses the closest candidate"""
+
+    def __init__(
+        self,
+        voter_id: str,
+        dim: int,
+        vector: np.ndarray | None = None,
+        cutoff: float = 0.5,
+    ):
+        super().__init__(voter_id, dim, vector)
+        self.cutoff = cutoff
+
+    def cast_ballot(self, candidates: List[Candidate]) -> Ballot[Set[CandidateId]]:
+        ranked_candidates = rank_by_distance(self.vector, candidates)
+        approved_candidates = ranked_candidates[
+            : int(len(ranked_candidates) * self.cutoff)
+        ]
+        return Ballot(
+            voter_id=self.voter_id,
+            data={c.id for c in approved_candidates},
         )
 
 
@@ -317,10 +351,11 @@ if __name__ == "__main__":
 
     # STV Election
     stv_voters = [
-        RankedVoter("v1", [1, 2], 3),
-        RankedVoter("v2", [1, 3], 3),
-        RankedVoter("v3", [2, 1], 3),
-        RankedVoter("v4", [3, 2], 3),
-        RankedVoter("v5", [3, 1], 3),
+        RankedVoter("v1", 3, vector=np.array([1, 2])),
+        RankedVoter("v2", 3, vector=np.array([1, 3])),
+        RankedVoter("v3", 3, vector=np.array([2, 1])),
+        RankedVoter("v4", 3, vector=np.array([3, 2])),
+        RankedVoter("v5", 3, vector=np.array([3, 1])),
     ]
     stv_election = STVElection(candidates, winners=2)
+    print("STV Winner:", stv_election.run(stv_voters)[0].id)
