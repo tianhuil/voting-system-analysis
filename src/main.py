@@ -7,9 +7,6 @@ from typing import Dict, Generic, List, Optional, Sequence, Set, TypeVar, Union
 # Type Definitions
 BallotType = TypeVar("BallotType")
 CandidateId = int
-VoteCount = Union[
-    int, float
-]  # New type for vote counts that can be either int or float
 
 
 @dataclass
@@ -120,7 +117,9 @@ class RCVElection(Election[Dict[CandidateId, int]]):
 
         while len(winners) < self.winners and active_candidates:
             # Count current votes
-            counts: Dict[CandidateId, VoteCount] = {cid: 0 for cid in active_candidates}
+            counts: Dict[CandidateId, int | float] = {
+                cid: 0 for cid in active_candidates
+            }
             for ballot in ballots:
                 valid_ranks = {
                     cid: rank
