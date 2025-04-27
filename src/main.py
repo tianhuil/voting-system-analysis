@@ -92,12 +92,16 @@ class RankedVoter(Voter[Dict[CandidateId, int]]):
     def cast_ballot(
         self, candidates: List[Candidate]
     ) -> Ballot[Dict[CandidateId, int]]:
-        remaining = [c.id for c in candidates if c.id not in self.preferences]
-        random.shuffle(remaining)
-        full_ranking = self.preferences + remaining
+        # Rank candidates by distance (closest first)
+        ranked_candidates = sorted(
+            candidates, key=lambda c: float(np.linalg.norm(self.vector - c.vector))
+        )
         return Ballot(
             voter_id=self.voter_id,
-            data={cid: rank for rank, cid in enumerate(full_ranking, 1)},
+            data={
+                candidate.id: rank
+                for rank, candidate in enumerate(ranked_candidates, 1)
+            },
         )
 
 
