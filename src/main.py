@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 from collections import Counter
 from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, Generic, List, Optional, Sequence, Set, TypeVar
+from typing import Dict, Generic, List, Optional, Sequence, Set, Type, TypeVar
 
 import numpy as np
 
@@ -28,6 +28,9 @@ class Ballot(Generic[BallotType]):
     data: BallotType
 
 
+V = TypeVar("V", bound="Voter")
+
+
 # Abstract Classes
 @dataclass
 class Voter(ABC, Generic[BallotType]):
@@ -35,7 +38,7 @@ class Voter(ABC, Generic[BallotType]):
     vector: np.typing.NDArray[np.float64]
 
     @classmethod
-    def random(cls, id: str, dim: int) -> "Voter":
+    def random(cls: Type[V], id: str, dim: int) -> V:
         return cls(id, np.random.normal(loc=0.0, scale=1.0, size=dim))
 
     @abstractmethod
