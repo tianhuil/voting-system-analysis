@@ -259,7 +259,7 @@ class ApprovalVotingElection(Election[ApprovalBallot]):
         super().__init__(candidates, winners)
         self.cutoff = cutoff
 
-    def cast_ballot(self, voter: Voter) -> Ballot[Set[CandidateId]]:
+    def cast_ballot(self, voter: Voter) -> Ballot[ApprovalBallot]:
         """Approval voter that chooses the closest candidates up to cutoff"""
         ranked_candidates = rank_by_distance(voter.vector, self.candidates)
         approved_candidates = ranked_candidates[
