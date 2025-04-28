@@ -4,23 +4,39 @@ use super::{
 };
 use ndarray::{Array1, Array2};
 
+/// Creates a Candidates object from a vector of values
+///
+/// # Arguments
+/// * `values` - A flat vector of values to be reshaped into a 2D array
+/// * `rows` - Number of rows (candidates)
+/// * `cols` - Number of columns (dimensions)
+fn mock_candidates_from_vec(values: Vec<f64>, rows: usize, cols: usize) -> Candidates {
+    Candidates::normalize(&Array2::from_shape_vec((rows, cols), values).unwrap())
+}
+
+/// Creates a Voters object from a vector of values
+///
+/// # Arguments
+/// * `values` - A flat vector of values to be reshaped into a 2D array
+/// * `rows` - Number of rows (voters)
+/// * `cols` - Number of columns (dimensions)
+fn mock_voters_from_vec(values: Vec<f64>, rows: usize, cols: usize) -> Voters {
+    Voters::normalize(&Array2::from_shape_vec((rows, cols), values).unwrap())
+}
+
 #[test]
 fn test_rank_by_alignment() {
-    let voter = Voters::normalize(
-        &Array2::from_shape_vec((1, 2), Array1::from_vec(vec![0.0, 1.0]).to_vec()).unwrap(),
-    );
+    let voter = mock_voters_from_vec(vec![0.0, 1.0], 1, 2);
 
     // Use Candidates.normalize and Voters.normalize
-    let candidates = Candidates::normalize(
-        &Array2::from_shape_vec(
-            (3, 2),
-            vec![
-                0.0, 1.0, // Candidate 0: Perfect alignment (0,1)
-                1.0, 1.0, // Candidate 1: Diagonal (1,1)
-                0.0, -1.0, // Candidate 2: Opposite (0,-1)
-            ],
-        )
-        .unwrap(),
+    let candidates = mock_candidates_from_vec(
+        vec![
+            0.0, 1.0, // Candidate 0: Perfect alignment (0,1)
+            1.0, 1.0, // Candidate 1: Diagonal (1,1)
+            0.0, -1.0, // Candidate 2: Opposite (0,-1)
+        ],
+        3,
+        2,
     );
 
     // Get rankings using the normalized vectors
