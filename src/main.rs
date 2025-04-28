@@ -118,6 +118,10 @@ impl Election for FPTPElection {
         candidate_vectors: &Array2<f64>,
         winners: usize,
     ) -> Vec<CandidateId> {
+        if winners != 1 {
+            panic!("FPTP election only supports single winner elections");
+        }
+
         let n_voters = voter_vectors.nrows();
         let mut candidate_ids = vec![0; n_voters];
 
@@ -184,6 +188,10 @@ impl RCVElection {
         candidate_vectors: &Array2<f64>,
         winners: usize,
     ) -> RCVResult {
+        if winners != 1 {
+            panic!("RCV election only supports single winner elections");
+        }
+
         let n_voters = voter_vectors.nrows();
         let n_candidates = candidate_vectors.nrows();
         let mut ballots = vec![vec![(0, 0); n_candidates]; n_voters];
@@ -201,7 +209,7 @@ impl RCVElection {
         let mut rounds = Vec::new();
         let mut round_number = 1;
 
-        while winners_vec.len() < winners && !active_candidates.is_empty() {
+        while winners_vec.is_empty() && !active_candidates.is_empty() {
             // Count first preferences
             let mut counts: HashMap<CandidateId, usize> = HashMap::new();
             for ballot in &ballots {
@@ -224,7 +232,6 @@ impl RCVElection {
             for (&cid, &count) in &counts {
                 if count >= majority {
                     winners_vec.push(cid);
-                    active_candidates.remove(&cid);
                     winner = Some(cid);
                     break;
                 }
@@ -319,6 +326,10 @@ impl Election for ApprovalVotingElection {
         candidate_vectors: &Array2<f64>,
         winners: usize,
     ) -> Vec<CandidateId> {
+        if winners != 1 {
+            panic!("Approval voting election only supports single winner elections");
+        }
+
         let n_voters = voter_vectors.nrows();
         let mut candidate_ids = Vec::new();
 
