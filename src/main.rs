@@ -53,7 +53,7 @@ trait Election {
     ) -> Vec<CandidateId>;
 }
 
-/// Calculate distances between a voter and all candidates and return indices sorted by distance
+/// Ranks candidates by their Euclidean distance from a voter's position vector
 fn rank_by_distance(
     voter_vector: &Array1<f64>,
     candidate_vectors: &Array2<f64>,
