@@ -1,6 +1,5 @@
 import random
 from abc import ABC, abstractmethod
-from collections import Counter
 from dataclasses import dataclass
 from enum import Enum
 from typing import (
@@ -104,6 +103,38 @@ def rank_by_distance(
     return np.argsort(distances)
 
 
+@njit
+def count_occurrences(items):
+    """
+    Numba-compatible function to count occurrences of items in a list Returns a
+    dictionary-like structure as a list of (item, count) tuples, sorted in
+    descending order of count
+    """
+    # Create a list to store unique items and their counts
+    unique_items = []
+    counts = []
+
+    # Count occurrences
+    for item in items:
+        found = False
+        for i in range(len(unique_items)):
+            if unique_items[i] == item:
+                counts[i] += 1
+                found = True
+                break
+        if not found:
+            unique_items.append(item)
+            counts.append(1)
+
+    # Sort by count in descending order
+    sorted_indices = np.argsort(np.array(counts))[::-1]
+    result = []
+    for i in sorted_indices:
+        result.append((unique_items[i], counts[i]))
+
+    return result
+
+
 ########################################################
 # First Past The Post (FPTP) System
 ########################################################
@@ -125,9 +156,8 @@ class FPTPElection(Election[Ballot[CandidateId]]):
             self.cast_ballot(i, voters.vectors[i]) for i in range(len(voters.vectors))
         ]
         candidate_ids = [b.data for b in ballots]
-        counts = Counter(candidate_ids)
-        winner_counts = counts.most_common(self.winners)
-        return [cid for cid, _ in winner_counts]
+        winner_counts = count_occurrences(candidate_ids)
+        return [cid for cid, _ in winner_counts[: self.winners]]
 
 
 ########################################################
@@ -310,9 +340,8 @@ class ApprovalVotingElection(Election[Set[CandidateId]]):
         candidate_ids = [
             candidate_id for ballot in ballots for candidate_id in ballot.data
         ]
-        counts = Counter(candidate_ids)
-        winner_counts = counts.most_common(self.winners)
-        return [cid for cid, _ in winner_counts]
+        winner_counts = count_occurrences(candidate_ids)
+        return [cid for cid, _ in winner_counts[: self.winners]]
 
 
 ########################################################
@@ -345,9 +374,8 @@ class LimitedVotingElection(Election[List[CandidateId]]):
         candidate_ids = [
             candidate_id for ballot in ballots for candidate_id in ballot.data
         ]
-        counts = Counter(candidate_ids)
-        winner_counts = counts.most_common(self.winners)
-        return [cid for cid, _ in winner_counts]
+        winner_counts = count_occurrences(candidate_ids)
+        return [cid for cid, _ in winner_counts[: self.winners]]
 
 
 def run_single_winner_election(
