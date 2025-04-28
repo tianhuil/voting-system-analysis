@@ -130,9 +130,7 @@ fn test_rcv_election_open() {
     );
 
     // Voters:
-    // Voter 0: Strongly prefers Extreme Left, then Consensus
-    // Voter 1: Strongly prefers Consensus
-    // Voter 2: Strongly prefers Extreme Right, then Consensus
+    // 2 Left voters, 3 Center voters, 3 Right voters
     let voters = mock_voters_from_vec(
         vec![
             -1.0, 0.0, // Left
@@ -150,6 +148,18 @@ fn test_rcv_election_open() {
 
     let result = RCVElection::run_open(&voters.vectors, &candidates.vectors, 1);
 
+    // Print detailed round information for debugging
+    println!("\nDetailed election results:");
+    for (i, round) in result.rounds.iter().enumerate() {
+        println!("\nRound {}:", i + 1);
+        println!("Active candidates: {:?}", round.active_candidates);
+        println!("Vote counts: {:?}", round.counts);
+        println!("Winner: {:?}", round.winner);
+        println!("Eliminated: {:?}", round.eliminated);
+        println!("Total votes: {}", round.total_votes);
+        println!("Majority threshold: {}", round.majority_threshold);
+    }
+
     // Check final result
     assert_eq!(result.winners.len(), 1);
     assert_eq!(result.winners[0], 1, "Consensus candidate should win");
@@ -165,6 +175,44 @@ fn test_rcv_election_open() {
     assert!(round1.winner.is_none());
     assert!(round1.eliminated.is_some());
 
+    // Check vote counts in first round
+    assert_eq!(
+        round1.counts.get(&0),
+        Some(&2),
+        "Left should have 2 votes in round 1"
+    );
+    assert_eq!(
+        round1.counts.get(&1),
+        Some(&3),
+        "Center should have 3 votes in round 1"
+    );
+    assert_eq!(
+        round1.counts.get(&2),
+        Some(&3),
+        "Right should have 3 votes in round 1"
+    );
+
+    // Verify active candidates in first round
+    assert!(
+        !round1.active_candidates.contains(&0),
+        "Left should not be active in round 1"
+    );
+    assert!(
+        round1.active_candidates.contains(&1),
+        "Center should be active in round 1"
+    );
+    assert!(
+        round1.active_candidates.contains(&2),
+        "Right should be active in round 1"
+    );
+
+    // Verify which candidate was eliminated
+    assert_eq!(
+        round1.eliminated,
+        Some(0),
+        "Left candidate should be eliminated in round 1"
+    );
+
     // Second round
     let round2 = &result.rounds[1];
     assert_eq!(round2.round_number, 2);
@@ -172,6 +220,37 @@ fn test_rcv_election_open() {
     assert_eq!(round2.majority_threshold, 5);
     assert_eq!(round2.winner, Some(1));
     assert!(round2.eliminated.is_none());
+
+    // Check vote counts in second round
+    assert_eq!(
+        round2.counts.get(&0),
+        None,
+        "Left should not be in counts in round 2"
+    );
+    assert_eq!(
+        round2.counts.get(&1),
+        Some(&5),
+        "Center should have 5 votes in round 2 (including transfers)"
+    );
+    assert_eq!(
+        round2.counts.get(&2),
+        Some(&3),
+        "Right should still have 3 votes in round 2"
+    );
+
+    // Verify active candidates in second round
+    assert!(
+        !round2.active_candidates.contains(&0),
+        "Left should not be active in round 2"
+    );
+    assert!(
+        !round2.active_candidates.contains(&1),
+        "Center should not be active in round 2 (already won)"
+    );
+    assert!(
+        round2.active_candidates.contains(&2),
+        "Right should be active in round 2"
+    );
 }
 
 #[test]
