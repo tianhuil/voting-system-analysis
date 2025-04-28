@@ -1,12 +1,10 @@
 use ndarray::{Array1, Array2, Axis};
-use num::Float;
 use rand::prelude::*;
 use rand_distr::Normal;
 use rayon::prelude::*;
 use std::collections::{HashMap, HashSet};
 
 type CandidateId = i64;
-type VoterId = i64;
 
 /// Normalizes a 2D array of vectors so each row has unit length
 fn normalize_vectors(vectors: &mut Array2<f64>) {
@@ -300,10 +298,9 @@ where
     F: Fn(&[T]) -> f64 + Sync + Send,
 {
     let n = data.len();
-    let mut theta_dots = Vec::with_capacity(n);
 
     // Compute leave-one-out estimates in parallel
-    theta_dots = (0..n)
+    let theta_dots: Vec<f64> = (0..n)
         .into_par_iter()
         .map(|i| {
             let mut leave_one_out: Vec<T> = data.to_vec();
@@ -366,7 +363,6 @@ fn main() {
     let dimension = 3;
     let n_candidates = 10;
     let n_voters = 10_000;
-    let winners = 1;
     let sigma = 0.3;
     let iterations = 100;
 
