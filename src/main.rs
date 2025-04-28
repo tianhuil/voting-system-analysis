@@ -422,9 +422,9 @@ fn run_single_winner_election<E: Election + Sync>(
 
 fn main() {
     let dimension = 3;
-    let n_candidates = 10;
+    let n_candidates = 5;
     let n_voters = 10_000;
-    let sigma = 0.3;
+    let sigma = 0.2;
     let iterations = 100;
 
     let candidates = Candidates::random(n_candidates, dimension);
