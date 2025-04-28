@@ -167,80 +167,115 @@ class FPTPElection(Election[CandidateId]):
 @njit
 def _rcv_cast_ballot(
     voter_vector: np.ndarray, candidate_vectors: np.ndarray
-) -> Dict[CandidateId, int]:
+) -> np.ndarray:
+    """Returns array of [candidate_id, rank] pairs sorted by rank"""
     ranked_indices = rank_by_distance(voter_vector, candidate_vectors)
-    return {int(idx): rank for rank, idx in enumerate(ranked_indices, 1)}
+    n_candidates = len(ranked_indices)
+    result = np.zeros((n_candidates, 2), dtype=np.int64)
+    for i, idx in enumerate(ranked_indices):
+        result[i] = [int(idx), i + 1]  # [candidate_id, rank]
+    return result
+
+
+@njit
+def _rcv_run(
+    voter_vectors: np.ndarray, candidate_vectors: np.ndarray, winners: int
+) -> np.ndarray:
+    n_voters = voter_vectors.shape[0]
+    n_candidates = candidate_vectors.shape[0]
+
+    # Create ballots array: [n_voters, n_candidates, 2] for [candidate_id, rank]
+    ballots = np.zeros((n_voters, n_candidates, 2), dtype=np.int64)
+    for i in prange(n_voters):
+        ballots[i] = _rcv_cast_ballot(voter_vectors[i], candidate_vectors)
+
+    # Track active candidates with boolean array
+    active_candidates = np.ones(n_candidates, dtype=np.bool_)
+    winners_array = np.zeros(winners, dtype=np.int64)
+    winners_count = 0
+
+    while winners_count < winners and np.any(active_candidates):
+        # Count current votes
+        counts = np.zeros(n_candidates, dtype=np.float64)
+        for i in range(n_voters):
+            # Find highest ranked active candidate
+            for j in range(n_candidates):
+                cid = int(ballots[i, j, 0])
+                if active_candidates[cid]:
+                    counts[cid] += 1
+                    break
+
+        total = np.sum(counts)
+        if total == 0:
+            break
+
+        if winners == 1:  # IRV Logic
+            majority = total / 2
+            for cid in range(n_candidates):
+                if active_candidates[cid] and counts[cid] > majority:
+                    winners_array[winners_count] = cid
+                    return winners_array[: winners_count + 1]
+
+            # Eliminate last place
+            min_count = np.inf
+            eliminate_cid = -1
+            for cid in range(n_candidates):
+                if active_candidates[cid] and counts[cid] < min_count:
+                    min_count = counts[cid]
+                    eliminate_cid = cid
+            active_candidates[eliminate_cid] = False
+
+        else:  # STV Logic
+            quota = total / (winners + 1) + 1
+            elected = np.zeros(n_candidates, dtype=np.bool_)
+
+            # Find candidates meeting quota
+            for cid in range(n_candidates):
+                if active_candidates[cid] and counts[cid] >= quota:
+                    elected[cid] = True
+                    winners_array[winners_count] = cid
+                    winners_count += 1
+                    active_candidates[cid] = False
+
+            if np.any(elected):
+                # Transfer surplus votes (simplified)
+                for cid in range(n_candidates):
+                    if elected[cid]:
+                        surplus = counts[cid] - quota
+                        transfer_factor = surplus / counts[cid]
+
+                        # Update counts for next preferences
+                        for i in range(n_voters):
+                            if int(ballots[i, 0, 0]) == cid:  # First preference
+                                # Find next active preference
+                                for j in range(1, n_candidates):
+                                    next_cid = int(ballots[i, j, 0])
+                                    if active_candidates[next_cid]:
+                                        counts[next_cid] += transfer_factor
+                                        break
+            else:
+                # Eliminate lowest candidate
+                min_count = np.inf
+                eliminate_cid = -1
+                for cid in range(n_candidates):
+                    if active_candidates[cid] and counts[cid] < min_count:
+                        min_count = counts[cid]
+                        eliminate_cid = cid
+                active_candidates[eliminate_cid] = False
+
+    return winners_array[:winners_count]
 
 
 class RCVElection(Election[Dict[CandidateId, int]]):
     name: str = "RCV"
 
     def cast_ballot(self, voter_vector: np.ndarray) -> Dict[CandidateId, int]:
-        return _rcv_cast_ballot(voter_vector, self.candidates.vectors)
+        ballot_array = _rcv_cast_ballot(voter_vector, self.candidates.vectors)
+        return {int(row[0]): int(row[1]) for row in ballot_array}
 
     def run(self, voters: Voters) -> List[CandidateId]:
-        ballots = [
-            self.cast_ballot(voters.vectors[i]) for i in range(len(voters.vectors))
-        ]
-        active_candidates = set(range(len(self.candidates.vectors)))
-        winners: List[CandidateId] = []
-
-        while len(winners) < self.winners and active_candidates:
-            counts: Dict[CandidateId, int | float] = {
-                cid: 0 for cid in active_candidates
-            }
-            for ballot in ballots:
-                valid_ranks = {
-                    cid: rank
-                    for cid, rank in ballot.items()
-                    if cid in active_candidates
-                }
-                if valid_ranks:
-                    top_cid = min(valid_ranks, key=lambda k: valid_ranks[k])
-                    counts[top_cid] += 1
-
-            self.rounds.append(counts.copy())
-
-            total = sum(counts.values())
-            if total == 0:
-                break
-
-            if self.winners == 1:
-                majority = total / 2
-                for cid, count in counts.items():
-                    if count > majority:
-                        winners.append(cid)
-                        return winners
-
-                eliminate_cid = min(counts, key=lambda k: counts[k])
-                active_candidates.remove(eliminate_cid)
-            else:
-                quota = total / (self.winners + 1) + 1
-                elected = [cid for cid, count in counts.items() if count >= quota]
-
-                if elected:
-                    for cid in elected:
-                        winners.append(cid)
-                        active_candidates.remove(cid)
-
-                    transfer_factor = 0.5
-                    for ballot in ballots:
-                        if any(cid in ballot for cid in elected):
-                            next_pref = next(
-                                (
-                                    cid
-                                    for cid, rank in ballot.items()
-                                    if cid in active_candidates
-                                ),
-                                None,
-                            )
-                            if next_pref:
-                                counts[next_pref] += transfer_factor
-                else:
-                    eliminate_cid = min(counts, key=lambda k: counts[k])
-                    active_candidates.remove(eliminate_cid)
-
-        return winners
+        winners = _rcv_run(voters.vectors, self.candidates.vectors, self.winners)
+        return [int(cid) for cid in winners]
 
 
 ########################################################
