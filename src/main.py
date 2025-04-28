@@ -64,7 +64,6 @@ class Election(ABC, Generic[BallotType]):
     def __init__(self, candidates: Candidates, winners: int = 1):
         self.candidates = candidates
         self.winners = winners
-        self.rounds: List[Dict] = []
 
     @abstractmethod
     def cast_ballot(self, voter_vector: np.ndarray) -> BallotType:
@@ -308,8 +307,6 @@ class STVElection(RCVElection):
                 if valid_ranks:
                     top_cid = min(valid_ranks, key=lambda k: valid_ranks[k])
                     counts[top_cid] += 1
-
-            self.rounds.append(counts.copy())
 
             elected = [cid for cid, count in counts.items() if count >= quota]
             for cid in elected:
