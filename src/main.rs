@@ -234,7 +234,13 @@ impl ApprovalVotingElection {
         cutoff: f64,
     ) -> Vec<CandidateId> {
         let n_candidates = candidate_vectors.nrows();
-        let approved_count = (n_candidates as f64 * cutoff) as usize;
+        // Ensure cutoff is at least 1/n_candidates to approve at least one candidate
+        let min_cutoff = 1.0 / n_candidates as f64;
+        let effective_cutoff = cutoff.max(min_cutoff);
+        let approved_count = (n_candidates as f64 * effective_cutoff) as usize;
+        if approved_count == 0 {
+            panic!("approved_count is 0: cutoff too low or no candidates");
+        }
         rank_by_alignment(voter_vector, candidate_vectors)
             .into_iter()
             .take(approved_count)
@@ -359,7 +365,6 @@ fn run_single_winner_election<E: Election + Sync>(
 }
 
 fn main() {
-    // Example usage
     let dimension = 3;
     let n_candidates = 10;
     let n_voters = 10_000;
@@ -380,3 +385,6 @@ fn main() {
         &perturbed_voters,
     );
 }
+
+#[cfg(test)]
+mod tests;
