@@ -53,25 +53,37 @@ trait Election {
     ) -> Vec<CandidateId>;
 }
 
-struct FPTPElection;
-
-impl FPTPElection {
-    fn cast_ballot(voter_vector: &Array1<f64>, candidate_vectors: &Array2<f64>) -> CandidateId {
-        let mut min_dist = f64::INFINITY;
-        let mut closest_candidate = 0;
-
-        for (j, candidate_vector) in candidate_vectors.rows().into_iter().enumerate() {
+/// Calculate distances between a voter and all candidates and return indices sorted by distance
+fn rank_by_distance(
+    voter_vector: &Array1<f64>,
+    candidate_vectors: &Array2<f64>,
+) -> Vec<(CandidateId, f64)> {
+    let mut distances: Vec<(CandidateId, f64)> = candidate_vectors
+        .rows()
+        .into_iter()
+        .enumerate()
+        .map(|(j, candidate_vector)| {
             let candidate_vector = candidate_vector.to_owned();
             let dist = (voter_vector - &candidate_vector)
                 .mapv(|x| x * x)
                 .sum()
                 .sqrt();
-            if dist < min_dist {
-                min_dist = dist;
-                closest_candidate = j as i64;
-            }
-        }
-        closest_candidate
+            (j as i64, dist)
+        })
+        .collect();
+    distances.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+    distances
+}
+
+////////////////////////////////////////////////////////////
+/// First Past the Post
+////////////////////////////////////////////////////////////
+
+struct FPTPElection;
+
+impl FPTPElection {
+    fn cast_ballot(voter_vector: &Array1<f64>, candidate_vectors: &Array2<f64>) -> CandidateId {
+        rank_by_distance(voter_vector, candidate_vectors)[0].0
     }
 }
 
@@ -112,6 +124,10 @@ impl Election for FPTPElection {
     }
 }
 
+////////////////////////////////////////////////////////////
+/// Ranked Choice Voting
+////////////////////////////////////////////////////////////
+
 struct RCVElection;
 
 impl RCVElection {
@@ -119,23 +135,10 @@ impl RCVElection {
         voter_vector: &Array1<f64>,
         candidate_vectors: &Array2<f64>,
     ) -> Vec<(CandidateId, usize)> {
-        let n_candidates = candidate_vectors.nrows();
-        let mut distances: Vec<(usize, f64)> = (0..n_candidates)
-            .map(|j| {
-                let candidate_vector = candidate_vectors.row(j).to_owned();
-                let dist = (voter_vector - &candidate_vector)
-                    .mapv(|x| x * x)
-                    .sum()
-                    .sqrt();
-                (j, dist)
-            })
-            .collect();
-        distances.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
-
-        distances
-            .iter()
+        rank_by_distance(voter_vector, candidate_vectors)
+            .into_iter()
             .enumerate()
-            .map(|(rank, &(cid, _))| (cid as i64, rank + 1))
+            .map(|(rank, (cid, _))| (cid, rank + 1))
             .collect()
     }
 }
@@ -208,6 +211,10 @@ impl Election for RCVElection {
     }
 }
 
+////////////////////////////////////////////////////////////
+/// Approval Voting
+////////////////////////////////////////////////////////////
+
 struct ApprovalVotingElection {
     cutoff: f64,
 }
@@ -219,23 +226,11 @@ impl ApprovalVotingElection {
         cutoff: f64,
     ) -> Vec<CandidateId> {
         let n_candidates = candidate_vectors.nrows();
-        let mut distances: Vec<(usize, f64)> = (0..n_candidates)
-            .map(|j| {
-                let candidate_vector = candidate_vectors.row(j).to_owned();
-                let dist = (voter_vector - &candidate_vector)
-                    .mapv(|x| x * x)
-                    .sum()
-                    .sqrt();
-                (j, dist)
-            })
-            .collect();
-        distances.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
-
         let approved_count = (n_candidates as f64 * cutoff) as usize;
-        distances
-            .iter()
+        rank_by_distance(voter_vector, candidate_vectors)
+            .into_iter()
             .take(approved_count)
-            .map(|&(cid, _)| cid as i64)
+            .map(|(cid, _)| cid)
             .collect()
     }
 }
@@ -278,6 +273,10 @@ impl Election for ApprovalVotingElection {
     }
 }
 
+////////////////////////////////////////////////////////////
+/// Run single winner elections
+////////////////////////////////////////////////////////////
+
 fn run_single_winner_election<E: Election + Sync>(
     election: &E,
     candidates: &Candidates,
@@ -305,7 +304,7 @@ fn main() {
     let n_candidates = 10;
     let n_voters = 1000;
     let winners = 1;
-    let sigma = 0.4;
+    let sigma = 0.3;
     let iterations = 100;
 
     let candidates = Candidates::random(n_candidates, dimension);
