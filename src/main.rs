@@ -34,6 +34,7 @@ impl Candidates {
         Self { vectors }
     }
 
+    #[allow(dead_code)]
     pub fn normalize(raw_vectors: &Array2<f64>) -> Self {
         let mut vectors = raw_vectors.clone();
         normalize_vectors(&mut vectors);
@@ -63,6 +64,7 @@ impl Voters {
         Self { vectors }
     }
 
+    #[allow(dead_code)]
     pub fn normalize(raw_vectors: &Array2<f64>) -> Self {
         let mut vectors = raw_vectors.clone();
         normalize_vectors(&mut vectors);
