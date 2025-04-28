@@ -65,26 +65,24 @@ trait Election {
     ) -> Vec<CandidateId>;
 }
 
-/// Ranks candidates by their Euclidean distance from a voter's position vector
-fn rank_by_distance(
+/// Ranks candidates by their alignment (dot product) with a voter's position vector
+/// Assumes that the voter and candidate vectors are normalized
+fn rank_by_alignment(
     voter_vector: &Array1<f64>,
     candidate_vectors: &Array2<f64>,
 ) -> Vec<(CandidateId, f64)> {
-    let mut distances: Vec<(CandidateId, f64)> = candidate_vectors
+    let mut alignments: Vec<(CandidateId, f64)> = candidate_vectors
         .rows()
         .into_iter()
         .enumerate()
         .map(|(j, candidate_vector)| {
             let candidate_vector = candidate_vector.to_owned();
-            let dist = (voter_vector - &candidate_vector)
-                .mapv(|x| x * x)
-                .sum()
-                .sqrt();
-            (j as i64, dist)
+            let alignment = voter_vector.dot(&candidate_vector);
+            (j as i64, alignment)
         })
         .collect();
-    distances.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
-    distances
+    alignments.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+    alignments
 }
 
 ////////////////////////////////////////////////////////////
@@ -95,7 +93,7 @@ struct FPTPElection;
 
 impl FPTPElection {
     fn cast_ballot(voter_vector: &Array1<f64>, candidate_vectors: &Array2<f64>) -> CandidateId {
-        rank_by_distance(voter_vector, candidate_vectors)[0].0
+        rank_by_alignment(voter_vector, candidate_vectors)[0].0
     }
 }
 
@@ -147,7 +145,7 @@ impl RCVElection {
         voter_vector: &Array1<f64>,
         candidate_vectors: &Array2<f64>,
     ) -> Vec<(CandidateId, usize)> {
-        rank_by_distance(voter_vector, candidate_vectors)
+        rank_by_alignment(voter_vector, candidate_vectors)
             .into_iter()
             .enumerate()
             .map(|(rank, (cid, _))| (cid, rank + 1))
@@ -239,7 +237,7 @@ impl ApprovalVotingElection {
     ) -> Vec<CandidateId> {
         let n_candidates = candidate_vectors.nrows();
         let approved_count = (n_candidates as f64 * cutoff) as usize;
-        rank_by_distance(voter_vector, candidate_vectors)
+        rank_by_alignment(voter_vector, candidate_vectors)
             .into_iter()
             .take(approved_count)
             .map(|(cid, _)| cid)
