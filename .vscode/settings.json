@@ -15,6 +15,7 @@
     "FPTP",
     "inplace",
     "isort",
+    "itertools",
     "jitclass",
     "linalg",
     "mapv",
