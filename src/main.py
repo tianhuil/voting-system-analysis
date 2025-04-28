@@ -21,7 +21,6 @@ import numpy as np
 from numba import njit, prange
 
 # Type Definitions
-BallotType = TypeVar("BallotType")
 CandidateId = int
 VoterId = int
 
@@ -60,18 +59,10 @@ class Voters:
         )
 
 
-class Election(ABC, Generic[BallotType]):
+class Election(ABC):
     """Base class for election systems"""
 
     name: str = "BASE"
-
-    @staticmethod
-    @abstractmethod
-    def cast_ballot(
-        voter_vector: np.ndarray, candidate_vectors: np.ndarray, **kwargs
-    ) -> BallotType:
-        """Cast a ballot for a voter based on the election rules"""
-        pass
 
     @staticmethod
     @abstractmethod
@@ -162,7 +153,7 @@ def _fptp_run(
     return np.array([cid for cid, _ in winner_counts[:winners]], dtype=np.int64)
 
 
-class FPTPElection(Election[CandidateId]):
+class FPTPElection(Election):
     name: str = "FPTP"
 
     @staticmethod
@@ -287,7 +278,7 @@ def _rcv_run(
     return winners_array[:winners_count]
 
 
-class RCVElection(Election[Dict[CandidateId, int]]):
+class RCVElection(Election):
     name: str = "RCV"
 
     @staticmethod
@@ -407,7 +398,7 @@ def _approval_run(
     return np.array([cid for cid, _ in winner_counts[:winners]], dtype=np.int64)
 
 
-class ApprovalVotingElection(Election[Set[CandidateId]]):
+class ApprovalVotingElection(Election):
     """Approval voting uses same counting as FPTP but different ballots"""
 
     name: str = "APPROVAL"
@@ -466,7 +457,7 @@ def _limited_run(
     return np.array([cid for cid, _ in winner_counts[:winners]], dtype=np.int64)
 
 
-class LimitedVotingElection(Election[List[CandidateId]]):
+class LimitedVotingElection(Election):
     """Limited Voting: Each voter can vote for up to k candidates"""
 
     name: str = "LIMITED"
