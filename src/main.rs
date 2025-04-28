@@ -188,20 +188,20 @@ impl RCVElection {
             panic!("RCV election only supports single winner elections");
         }
 
-        let n_voters = voter_vectors.nrows();
-        let n_candidates = candidate_vectors.nrows();
-
         // Cast ballots using functional approach
-        let ballots: Vec<Vec<(CandidateId, usize)>> = (0..n_voters)
-            .map(|i| {
-                let voter_vector = voter_vectors.row(i).to_owned();
-                Self::cast_ballot(&voter_vector, candidate_vectors)
-            })
+        let ballots: Vec<Vec<(CandidateId, usize)>> = voter_vectors
+            .rows()
+            .into_iter()
+            .map(|voter_vector| Self::cast_ballot(&voter_vector.to_owned(), candidate_vectors))
             .collect();
 
         // Run RCV
-        let mut active_candidates: HashSet<CandidateId> =
-            (0..n_candidates).map(|i| i as i64).collect();
+        let mut active_candidates: HashSet<CandidateId> = candidate_vectors
+            .rows()
+            .into_iter()
+            .enumerate()
+            .map(|(i, _)| i as i64)
+            .collect();
         let mut winners_vec = Vec::with_capacity(winners);
         let mut rounds = Vec::new();
         let mut round_number = 1;
@@ -329,13 +329,12 @@ impl Election for ApprovalVotingElection {
             panic!("Approval voting election only supports single winner elections");
         }
 
-        let n_voters = voter_vectors.nrows();
-
         // Cast ballots using functional approach
-        let candidate_ids: Vec<CandidateId> = (0..n_voters)
-            .flat_map(|i| {
-                let voter_vector = voter_vectors.row(i).to_owned();
-                Self::cast_ballot(&voter_vector, candidate_vectors, self.cutoff)
+        let candidate_ids: Vec<CandidateId> = voter_vectors
+            .rows()
+            .into_iter()
+            .flat_map(|voter_vector| {
+                Self::cast_ballot(&voter_vector.to_owned(), candidate_vectors, self.cutoff)
             })
             .collect();
 
