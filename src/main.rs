@@ -14,6 +14,23 @@ trait Election {
 
 struct FPTPElection;
 
+impl FPTPElection {
+    fn cast_ballot(voter_vector: &Array1<f64>, candidate_vectors: &Array2<f64>) -> CandidateId {
+        let mut min_dist = f64::INFINITY;
+        let mut closest_candidate = 0;
+
+        for (j, candidate_vector) in candidate_vectors.rows().into_iter().enumerate() {
+            let candidate_vector = candidate_vector.to_owned();
+            let dist = (voter_vector - &candidate_vector).mapv(|x| x * x).sum().sqrt();
+            if dist < min_dist {
+                min_dist = dist;
+                closest_candidate = j as i64;
+            }
+        }
+        closest_candidate
+    }
+}
+
 impl Election for FPTPElection {
     fn name(&self) -> &'static str {
         "FPTP"
@@ -26,18 +43,7 @@ impl Election for FPTPElection {
         // Cast ballots
         for i in 0..n_voters {
             let voter_vector = voter_vectors.row(i).to_owned();
-            let mut min_dist = f64::INFINITY;
-            let mut closest_candidate = 0;
-
-            for (j, candidate_vector) in candidate_vectors.rows().into_iter().enumerate() {
-                let candidate_vector = candidate_vector.to_owned();
-                let dist = (&voter_vector - &candidate_vector).mapv(|x| x * x).sum().sqrt();
-                if dist < min_dist {
-                    min_dist = dist;
-                    closest_candidate = j as i64;
-                }
-            }
-            candidate_ids[i] = closest_candidate;
+            candidate_ids[i] = Self::cast_ballot(&voter_vector, candidate_vectors);
         }
 
         // Count votes
@@ -55,6 +61,25 @@ impl Election for FPTPElection {
 
 struct RCVElection;
 
+impl RCVElection {
+    fn cast_ballot(voter_vector: &Array1<f64>, candidate_vectors: &Array2<f64>) -> Vec<(CandidateId, usize)> {
+        let n_candidates = candidate_vectors.nrows();
+        let mut distances: Vec<(usize, f64)> = (0..n_candidates)
+            .map(|j| {
+                let candidate_vector = candidate_vectors.row(j).to_owned();
+                let dist = (voter_vector - &candidate_vector).mapv(|x| x * x).sum().sqrt();
+                (j, dist)
+            })
+            .collect();
+        distances.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+
+        distances.iter()
+            .enumerate()
+            .map(|(rank, &(cid, _))| (cid as i64, rank + 1))
+            .collect()
+    }
+}
+
 impl Election for RCVElection {
     fn name(&self) -> &'static str {
         "RCV"
@@ -68,18 +93,7 @@ impl Election for RCVElection {
         // Cast ballots
         for i in 0..n_voters {
             let voter_vector = voter_vectors.row(i).to_owned();
-            let mut distances: Vec<(usize, f64)> = (0..n_candidates)
-                .map(|j| {
-                    let candidate_vector = candidate_vectors.row(j).to_owned();
-                    let dist = (&voter_vector - &candidate_vector).mapv(|x| x * x).sum().sqrt();
-                    (j, dist)
-                })
-                .collect();
-            distances.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
-
-            for (rank, &(cid, _)) in distances.iter().enumerate() {
-                ballots[i][rank] = (cid as i64, rank + 1);
-            }
+            ballots[i] = Self::cast_ballot(&voter_vector, candidate_vectors);
         }
 
         // Run RCV
@@ -132,6 +146,26 @@ struct ApprovalVotingElection {
     cutoff: f64,
 }
 
+impl ApprovalVotingElection {
+    fn cast_ballot(voter_vector: &Array1<f64>, candidate_vectors: &Array2<f64>, cutoff: f64) -> Vec<CandidateId> {
+        let n_candidates = candidate_vectors.nrows();
+        let mut distances: Vec<(usize, f64)> = (0..n_candidates)
+            .map(|j| {
+                let candidate_vector = candidate_vectors.row(j).to_owned();
+                let dist = (voter_vector - &candidate_vector).mapv(|x| x * x).sum().sqrt();
+                (j, dist)
+            })
+            .collect();
+        distances.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+
+        let approved_count = (n_candidates as f64 * cutoff) as usize;
+        distances.iter()
+            .take(approved_count)
+            .map(|&(cid, _)| cid as i64)
+            .collect()
+    }
+}
+
 impl Election for ApprovalVotingElection {
     fn name(&self) -> &'static str {
         "APPROVAL"
@@ -139,25 +173,13 @@ impl Election for ApprovalVotingElection {
 
     fn run(&self, voter_vectors: &Array2<f64>, candidate_vectors: &Array2<f64>, winners: usize) -> Vec<CandidateId> {
         let n_voters = voter_vectors.nrows();
-        let n_candidates = candidate_vectors.nrows();
         let mut candidate_ids = Vec::new();
 
         // Cast ballots
         for i in 0..n_voters {
             let voter_vector = voter_vectors.row(i).to_owned();
-            let mut distances: Vec<(usize, f64)> = (0..n_candidates)
-                .map(|j| {
-                    let candidate_vector = candidate_vectors.row(j).to_owned();
-                    let dist = (&voter_vector - &candidate_vector).mapv(|x| x * x).sum().sqrt();
-                    (j, dist)
-                })
-                .collect();
-            distances.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
-
-            let approved_count = (n_candidates as f64 * self.cutoff) as usize;
-            for &(cid, _) in distances.iter().take(approved_count) {
-                candidate_ids.push(cid as i64);
-            }
+            let approved = Self::cast_ballot(&voter_vector, candidate_vectors, self.cutoff);
+            candidate_ids.extend(approved);
         }
 
         // Count votes
