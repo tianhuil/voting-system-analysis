@@ -159,9 +159,8 @@ pub struct RCVRoundInfo {
     pub eliminated: Option<CandidateId>,
 }
 
-#[derive(Debug)]
 pub struct RCVResult {
-    pub winners: Vec<CandidateId>,
+    pub winner: Option<CandidateId>,
     pub rounds: Vec<RCVRoundInfo>,
 }
 
@@ -202,11 +201,11 @@ impl RCVElection {
             .enumerate()
             .map(|(i, _)| i as i64)
             .collect();
-        let mut winners_vec = Vec::with_capacity(winners);
+        let mut winner: Option<CandidateId> = None;
         let mut rounds = Vec::new();
         let mut round_number = 1;
 
-        while winners_vec.is_empty() && !active_candidates.is_empty() {
+        while winner.is_none() && !active_candidates.is_empty() {
             // Count first preferences
             let counts: HashMap<CandidateId, usize> = ballots
                 .iter()
@@ -222,21 +221,14 @@ impl RCVElection {
             let total_votes: usize = counts.values().sum();
             let majority = total_votes / 2 + 1;
 
-            let mut winner = None;
             let mut eliminated = None;
 
             // Check for majority winner
-            winner = counts
-                .iter()
-                .find(|(_, &count)| count >= majority)
-                .map(|(&cid, _)| {
-                    winners_vec.push(cid);
-                    active_candidates.remove(&cid); // Only remove the winning candidate
-                    cid
-                });
-
-            // If no winner, eliminate last place
-            if winner.is_none() {
+            if let Some((&cid, _)) = counts.iter().find(|(_, &count)| count >= majority) {
+                winner = Some(cid);
+                active_candidates.remove(&cid);
+            } else {
+                // If no winner, eliminate last place
                 let min_count = counts.values().min().unwrap_or(&0);
                 eliminated =
                     counts
@@ -262,10 +254,7 @@ impl RCVElection {
             round_number += 1;
         }
 
-        RCVResult {
-            winners: winners_vec,
-            rounds,
-        }
+        RCVResult { winner, rounds }
     }
 }
 
@@ -280,7 +269,9 @@ impl Election for RCVElection {
         candidate_vectors: &Array2<f64>,
         winners: usize,
     ) -> Vec<CandidateId> {
-        Self::run_open(voter_vectors, candidate_vectors, winners).winners
+        Self::run_open(voter_vectors, candidate_vectors, winners)
+            .winner
+            .map_or_else(Vec::new, |w| vec![w])
     }
 }
 

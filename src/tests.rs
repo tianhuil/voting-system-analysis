@@ -161,8 +161,8 @@ fn test_rcv_election_open() {
     }
 
     // Check final result
-    assert_eq!(result.winners.len(), 1);
-    assert_eq!(result.winners[0], 1, "Consensus candidate should win");
+    assert!(result.winner.is_some());
+    assert_eq!(result.winner.unwrap(), 1, "Consensus candidate should win");
 
     // Check rounds
     assert_eq!(result.rounds.len(), 2, "Should take 2 rounds");
