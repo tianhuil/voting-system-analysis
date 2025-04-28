@@ -60,12 +60,6 @@ class Voters:
         )
 
 
-@dataclass
-class Ballot(Generic[BallotType]):
-    voter_id: VoterId
-    data: BallotType
-
-
 class Election(ABC, Generic[BallotType]):
     def __init__(self, candidates: Candidates, winners: int = 1):
         self.candidates = candidates
@@ -73,9 +67,7 @@ class Election(ABC, Generic[BallotType]):
         self.rounds: List[Dict] = []
 
     @abstractmethod
-    def cast_ballot(
-        self, voter_id: VoterId, voter_vector: np.ndarray
-    ) -> Ballot[BallotType]:
+    def cast_ballot(self, voter_id: VoterId, voter_vector: np.ndarray) -> BallotType:
         """Cast a ballot for a voter based on the election rules"""
         pass
 
@@ -138,24 +130,17 @@ def count_occurrences(items):
 ########################################################
 # First Past The Post (FPTP) System
 ########################################################
-class FPTPElection(Election[Ballot[CandidateId]]):
+class FPTPElection(Election[CandidateId]):
     name: str = "FPTP"
 
-    def cast_ballot(
-        self, voter_id: VoterId, voter_vector: np.ndarray
-    ) -> Ballot[CandidateId]:
-        """FPTP voter that chooses the closest candidate"""
+    def cast_ballot(self, voter_id: VoterId, voter_vector: np.ndarray) -> CandidateId:
         ranked_indices = rank_by_distance(voter_vector, self.candidates.vectors)
-        return Ballot(
-            voter_id=voter_id,
-            data=int(ranked_indices[0]),
-        )
+        return int(ranked_indices[0])
 
     def run(self, voters: Voters) -> List[CandidateId]:
-        ballots = [
+        candidate_ids = [
             self.cast_ballot(i, voters.vectors[i]) for i in range(len(voters.vectors))
         ]
-        candidate_ids = [b.data for b in ballots]
         winner_counts = count_occurrences(candidate_ids)
         return [cid for cid, _ in winner_counts[: self.winners]]
 
@@ -168,13 +153,9 @@ class RCVElection(Election[Dict[CandidateId, int]]):
 
     def cast_ballot(
         self, voter_id: VoterId, voter_vector: np.ndarray
-    ) -> Ballot[Dict[CandidateId, int]]:
-        """RCV/STV voter with preferences"""
+    ) -> Dict[CandidateId, int]:
         ranked_indices = rank_by_distance(voter_vector, self.candidates.vectors)
-        return Ballot(
-            voter_id=voter_id,
-            data={int(idx): rank for rank, idx in enumerate(ranked_indices, 1)},
-        )
+        return {int(idx): rank for rank, idx in enumerate(ranked_indices, 1)}
 
     def run(self, voters: Voters) -> List[CandidateId]:
         ballots = [
@@ -184,38 +165,35 @@ class RCVElection(Election[Dict[CandidateId, int]]):
         winners: List[CandidateId] = []
 
         while len(winners) < self.winners and active_candidates:
-            # Count current votes
             counts: Dict[CandidateId, int | float] = {
                 cid: 0 for cid in active_candidates
             }
             for ballot in ballots:
                 valid_ranks = {
                     cid: rank
-                    for cid, rank in ballot.data.items()
+                    for cid, rank in ballot.items()
                     if cid in active_candidates
                 }
                 if valid_ranks:
-                    top_cid = min(valid_ranks, key=valid_ranks.get)  # type: ignore
+                    top_cid = min(valid_ranks, key=lambda k: valid_ranks[k])
                     counts[top_cid] += 1
 
             self.rounds.append(counts.copy())
 
-            # Check for majority
             total = sum(counts.values())
             if total == 0:
                 break
 
-            if self.winners == 1:  # IRV Logic
+            if self.winners == 1:
                 majority = total / 2
                 for cid, count in counts.items():
                     if count > majority:
                         winners.append(cid)
                         return winners
 
-                # Eliminate last place
-                eliminate_cid = min(counts, key=counts.get)  # type: ignore
+                eliminate_cid = min(counts, key=lambda k: counts[k])
                 active_candidates.remove(eliminate_cid)
-            else:  # STV Logic
+            else:
                 quota = total / (self.winners + 1) + 1
                 elected = [cid for cid, count in counts.items() if count >= quota]
 
@@ -224,14 +202,13 @@ class RCVElection(Election[Dict[CandidateId, int]]):
                         winners.append(cid)
                         active_candidates.remove(cid)
 
-                    # Transfer surplus votes (simplified)
-                    transfer_factor = 0.5  # Actual STV uses precise calculations
+                    transfer_factor = 0.5
                     for ballot in ballots:
-                        if any(cid in ballot.data for cid in elected):
+                        if any(cid in ballot for cid in elected):
                             next_pref = next(
                                 (
                                     cid
-                                    for cid, rank in ballot.data.items()
+                                    for cid, rank in ballot.items()
                                     if cid in active_candidates
                                 ),
                                 None,
@@ -239,7 +216,7 @@ class RCVElection(Election[Dict[CandidateId, int]]):
                             if next_pref:
                                 counts[next_pref] += transfer_factor
                 else:
-                    eliminate_cid = min(counts, key=counts.get)  # type: ignore
+                    eliminate_cid = min(counts, key=lambda k: counts[k])
                     active_candidates.remove(eliminate_cid)
 
         return winners
@@ -265,35 +242,32 @@ class STVElection(RCVElection):
         quota = len(ballots) / (self.winners + 1) + 1
 
         while len(winners) < self.winners and active_candidates:
-            # Count current votes
             counts: Dict[CandidateId, float] = {cid: 0.0 for cid in active_candidates}
             for ballot in ballots:
                 valid_ranks = {
                     cid: rank
-                    for cid, rank in ballot.data.items()
+                    for cid, rank in ballot.items()
                     if cid in active_candidates
                 }
                 if valid_ranks:
-                    top_cid = min(valid_ranks, key=valid_ranks.get)  # type: ignore
+                    top_cid = min(valid_ranks, key=lambda k: valid_ranks[k])
                     counts[top_cid] += 1
 
             self.rounds.append(counts.copy())
 
-            # Elect candidates meeting quota
             elected = [cid for cid, count in counts.items() if count >= quota]
             for cid in elected:
                 winners.append(cid)
                 active_candidates.pop(cid)
                 surplus = counts[cid] - quota
 
-                # Transfer surplus votes
                 transfer_factor = surplus / counts[cid]
                 for ballot in ballots:
-                    if ballot.data.get(cid, 0) == 1:  # First preference
+                    if ballot.get(cid, 0) == 1:
                         next_pref = next(
                             (
                                 cid
-                                for cid, rank in ballot.data.items()
+                                for cid, rank in ballot.items()
                                 if cid in active_candidates
                             ),
                             None,
@@ -302,8 +276,7 @@ class STVElection(RCVElection):
                             counts[next_pref] += transfer_factor
 
             if not elected:
-                # Eliminate lowest candidate
-                eliminate_cid = min(counts, key=counts.get)  # type: ignore
+                eliminate_cid = min(counts, key=lambda k: counts[k])
                 active_candidates.pop(eliminate_cid)
 
         return winners
@@ -323,22 +296,17 @@ class ApprovalVotingElection(Election[Set[CandidateId]]):
 
     def cast_ballot(
         self, voter_id: VoterId, voter_vector: np.ndarray
-    ) -> Ballot[Set[CandidateId]]:
-        """Approval voter that chooses the closest candidates up to cutoff"""
+    ) -> Set[CandidateId]:
         ranked_indices = rank_by_distance(voter_vector, self.candidates.vectors)
         approved_count = int(len(ranked_indices) * self.cutoff)
         approved_candidates = ranked_indices[:approved_count]
-        return Ballot(
-            voter_id=voter_id,
-            data={int(idx) for idx in approved_candidates},
-        )
+        return {int(idx) for idx in approved_candidates}
 
     def run(self, voters: Voters) -> List[CandidateId]:
-        ballots = [
-            self.cast_ballot(i, voters.vectors[i]) for i in range(len(voters.vectors))
-        ]
         candidate_ids = [
-            candidate_id for ballot in ballots for candidate_id in ballot.data
+            candidate_id
+            for i in range(len(voters.vectors))
+            for candidate_id in self.cast_ballot(i, voters.vectors[i])
         ]
         winner_counts = count_occurrences(candidate_ids)
         return [cid for cid, _ in winner_counts[: self.winners]]
@@ -358,21 +326,16 @@ class LimitedVotingElection(Election[List[CandidateId]]):
 
     def cast_ballot(
         self, voter_id: VoterId, voter_vector: np.ndarray
-    ) -> Ballot[List[CandidateId]]:
-        """Limited voter that selects up to max_choices candidates"""
+    ) -> List[CandidateId]:
         ranked_indices = rank_by_distance(voter_vector, self.candidates.vectors)
         chosen = ranked_indices[: self.max_choices]
-        return Ballot(
-            voter_id=voter_id,
-            data=[int(idx) for idx in chosen],
-        )
+        return [int(idx) for idx in chosen]
 
     def run(self, voters: Voters) -> List[CandidateId]:
-        ballots = [
-            self.cast_ballot(i, voters.vectors[i]) for i in range(len(voters.vectors))
-        ]
         candidate_ids = [
-            candidate_id for ballot in ballots for candidate_id in ballot.data
+            candidate_id
+            for i in range(len(voters.vectors))
+            for candidate_id in self.cast_ballot(i, voters.vectors[i])
         ]
         winner_counts = count_occurrences(candidate_ids)
         return [cid for cid, _ in winner_counts[: self.winners]]
