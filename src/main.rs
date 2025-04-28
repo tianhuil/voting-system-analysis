@@ -10,11 +10,15 @@ type CandidateId = i64;
 /// Normalizes a 2D array of vectors so each row has unit length
 fn normalize_vectors(vectors: &mut Array2<f64>) {
     let norms = vectors.map_axis(Axis(1), |row| row.mapv(|x| x * x).sum().sqrt());
-    for (mut row, &norm) in vectors.rows_mut().into_iter().zip(norms.iter()) {
-        if norm > 0.0 {
-            row.mapv_inplace(|x| x / norm);
-        }
-    }
+    vectors
+        .rows_mut()
+        .into_iter()
+        .zip(norms.iter())
+        .for_each(|(mut row, &norm)| {
+            if norm > 0.0 {
+                row.mapv_inplace(|x| x / norm);
+            }
+        });
 }
 
 struct Candidates {
@@ -119,14 +123,12 @@ impl Election for FPTPElection {
         candidate_vectors: &Array2<f64>,
         winners: usize,
     ) -> Vec<CandidateId> {
-        let n_voters = voter_vectors.nrows();
-        let mut candidate_ids = vec![0; n_voters];
-
-        // Cast ballots
-        for i in 0..n_voters {
-            let voter_vector = voter_vectors.row(i).to_owned();
-            candidate_ids[i] = Self::cast_ballot(&voter_vector, candidate_vectors);
-        }
+        // Cast ballots using functional approach
+        let candidate_ids: Vec<CandidateId> = voter_vectors
+            .rows()
+            .into_iter()
+            .map(|voter_vector| Self::cast_ballot(&voter_vector.to_owned(), candidate_vectors))
+            .collect();
 
         // Count votes
         let counts = candidate_ids.iter().counts();
@@ -188,13 +190,14 @@ impl RCVElection {
 
         let n_voters = voter_vectors.nrows();
         let n_candidates = candidate_vectors.nrows();
-        let mut ballots = vec![vec![(0, 0); n_candidates]; n_voters];
 
-        // Cast ballots
-        for i in 0..n_voters {
-            let voter_vector = voter_vectors.row(i).to_owned();
-            ballots[i] = Self::cast_ballot(&voter_vector, candidate_vectors);
-        }
+        // Cast ballots using functional approach
+        let ballots: Vec<Vec<(CandidateId, usize)>> = (0..n_voters)
+            .map(|i| {
+                let voter_vector = voter_vectors.row(i).to_owned();
+                Self::cast_ballot(&voter_vector, candidate_vectors)
+            })
+            .collect();
 
         // Run RCV
         let mut active_candidates: HashSet<CandidateId> =
@@ -223,25 +226,26 @@ impl RCVElection {
             let mut eliminated = None;
 
             // Check for majority winner
-            for (&cid, &count) in &counts {
-                if count >= majority {
+            winner = counts
+                .iter()
+                .find(|(_, &count)| count >= majority)
+                .map(|(&cid, _)| {
                     winners_vec.push(cid);
-                    winner = Some(cid);
                     active_candidates.remove(&cid); // Only remove the winning candidate
-                    break;
-                }
-            }
+                    cid
+                });
 
             // If no winner, eliminate last place
             if winner.is_none() {
                 let min_count = counts.values().min().unwrap_or(&0);
-                for (&cid, &count) in &counts {
-                    if count == *min_count {
-                        active_candidates.remove(&cid);
-                        eliminated = Some(cid);
-                        break;
-                    }
-                }
+                eliminated =
+                    counts
+                        .iter()
+                        .find(|(_, &count)| count == *min_count)
+                        .map(|(&cid, _)| {
+                            active_candidates.remove(&cid);
+                            cid
+                        });
             }
 
             // Record round information
@@ -326,14 +330,14 @@ impl Election for ApprovalVotingElection {
         }
 
         let n_voters = voter_vectors.nrows();
-        let mut candidate_ids = Vec::new();
 
-        // Cast ballots
-        for i in 0..n_voters {
-            let voter_vector = voter_vectors.row(i).to_owned();
-            let approved = Self::cast_ballot(&voter_vector, candidate_vectors, self.cutoff);
-            candidate_ids.extend(approved);
-        }
+        // Cast ballots using functional approach
+        let candidate_ids: Vec<CandidateId> = (0..n_voters)
+            .flat_map(|i| {
+                let voter_vector = voter_vectors.row(i).to_owned();
+                Self::cast_ballot(&voter_vector, candidate_vectors, self.cutoff)
+            })
+            .collect();
 
         // Count votes
         let counts = candidate_ids.iter().counts();
