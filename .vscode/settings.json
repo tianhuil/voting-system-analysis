@@ -15,7 +15,9 @@
     "isort",
     "linalg",
     "ndarray",
+    "njit",
     "numpy",
+    "prange",
     "setuptools"
   ]
 }
