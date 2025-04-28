@@ -1,5 +1,4 @@
 use super::*;
-use ndarray::Array1;
 
 fn create_test_data() -> (Array2<f64>, Array2<f64>) {
     // Create 3 candidates in 2D space
