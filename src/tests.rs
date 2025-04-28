@@ -54,22 +54,20 @@ fn test_rank_by_alignment() {
     assert!((rankings[2].1 + 1.0).abs() < 1e-10); // Opposite alignment should be ~-1.0
 }
 
-fn create_test_data() -> (Array2<f64>, Array2<f64>) {
+fn create_test_data() -> (Voters, Candidates) {
     // Create 3 candidates in 2D space
-    let candidate_vectors = Array2::from_shape_vec(
-        (3, 2),
+    let candidates = mock_candidates_from_vec(
         vec![
             0.0, 1.0, // Candidate 0: (0,1)
             1.0, 0.0, // Candidate 1: (1,0)
             -1.0, 0.0, // Candidate 2: (-1,0)
         ],
-    )
-    .unwrap();
-    normalize_vectors(&mut candidate_vectors.clone());
+        3,
+        2,
+    );
 
     // Create 5 voters in 2D space with more voters aligned with candidate 0
-    let voter_vectors = Array2::from_shape_vec(
-        (5, 2),
+    let voters = mock_voters_from_vec(
         vec![
             0.0, 1.0, // Voter 0: (0,1) - should prefer candidate 0
             0.0, 1.0, // Voter 1: (0,1) - should prefer candidate 0
@@ -77,25 +75,25 @@ fn create_test_data() -> (Array2<f64>, Array2<f64>) {
             1.0, 0.0, // Voter 3: (1,0) - should prefer candidate 1
             -1.0, 0.0, // Voter 4: (-1,0) - should prefer candidate 2
         ],
-    )
-    .unwrap();
-    normalize_vectors(&mut voter_vectors.clone());
+        5,
+        2,
+    );
 
-    (voter_vectors, candidate_vectors)
+    (voters, candidates)
 }
 
 #[test]
 fn test_fptp_election() {
-    let (voter_vectors, candidate_vectors) = create_test_data();
+    let (voters, candidates) = create_test_data();
     let election = FPTPElection;
 
     // Test single winner
-    let winners = election.run(&voter_vectors, &candidate_vectors, 1);
+    let winners = election.run(&voters.vectors, &candidates.vectors, 1);
     assert_eq!(winners.len(), 1);
     assert_eq!(winners[0], 0); // Candidate 0 should win (3 votes)
 
     // Test multiple winners
-    let winners = election.run(&voter_vectors, &candidate_vectors, 2);
+    let winners = election.run(&voters.vectors, &candidates.vectors, 2);
     assert_eq!(winners.len(), 2);
     assert_eq!(winners[0], 0); // First place: Candidate 0 (3 votes)
     assert!(winners.contains(&1) || winners.contains(&2)); // Second place: Candidate 1 or 2 (1 vote each)
@@ -103,50 +101,50 @@ fn test_fptp_election() {
 
 #[test]
 fn test_rcv_election() {
-    let (voter_vectors, candidate_vectors) = create_test_data();
+    let (voters, candidates) = create_test_data();
     let election = RCVElection;
 
     // Test single winner
-    let winners = election.run(&voter_vectors, &candidate_vectors, 1);
+    let winners = election.run(&voters.vectors, &candidates.vectors, 1);
     assert_eq!(winners.len(), 1);
     assert_eq!(winners[0], 0); // Candidate 0 should win (3 votes)
 
     // Test ballot casting
-    let voter_vector = voter_vectors.row(0).to_owned();
-    let ballot = RCVElection::cast_ballot(&voter_vector, &candidate_vectors);
+    let voter_vector = voters.vectors.row(0).to_owned();
+    let ballot = RCVElection::cast_ballot(&voter_vector, &candidates.vectors);
     assert_eq!(ballot[0].0, 0); // First preference should be candidate 0
     assert_eq!(ballot[0].1, 1); // Rank 1
 }
 
 #[test]
 fn test_approval_voting() {
-    let (voter_vectors, candidate_vectors) = create_test_data();
+    let (voters, candidates) = create_test_data();
     let election = ApprovalVotingElection { cutoff: 0.5 };
 
     // Test single winner with all voters
-    let winners = election.run(&voter_vectors, &candidate_vectors, 1);
+    let winners = election.run(&voters.vectors, &candidates.vectors, 1);
     println!("Winners: {:?}", winners);
     assert_eq!(winners.len(), 1);
     assert_eq!(winners[0], 0); // Candidate 0 should win (most approvals)
 
     // Test ballot casting with first voter (aligned with candidate 0)
-    let voter_vector = voter_vectors.row(0).to_owned();
-    let alignments = rank_by_alignment(&voter_vector, &candidate_vectors);
+    let voter_vector = voters.vectors.row(0).to_owned();
+    let alignments = rank_by_alignment(&voter_vector, &candidates.vectors);
     println!("Alignments: {:?}", alignments);
 
-    let approved = ApprovalVotingElection::cast_ballot(&voter_vector, &candidate_vectors, 0.5);
+    let approved = ApprovalVotingElection::cast_ballot(&voter_vector, &candidates.vectors, 0.5);
     println!("Approved with cutoff 0.5: {:?}", approved);
     assert_eq!(approved.len(), 1); // With cutoff 0.5 and 3 candidates, should approve 1 candidate
     assert!(approved.contains(&0)); // Should approve candidate 0 (highest alignment)
 
     // Test with different cutoff
-    let approved = ApprovalVotingElection::cast_ballot(&voter_vector, &candidate_vectors, 0.33);
+    let approved = ApprovalVotingElection::cast_ballot(&voter_vector, &candidates.vectors, 0.33);
     println!("Approved with cutoff 0.33: {:?}", approved);
     assert_eq!(approved.len(), 1); // With cutoff 0.33 and 3 candidates, should approve 1 candidate
     assert!(approved.contains(&0)); // Should still approve candidate 0 (highest alignment)
 
     // Test with higher cutoff
-    let approved = ApprovalVotingElection::cast_ballot(&voter_vector, &candidate_vectors, 0.7);
+    let approved = ApprovalVotingElection::cast_ballot(&voter_vector, &candidates.vectors, 0.7);
     println!("Approved with cutoff 0.7: {:?}", approved);
     assert_eq!(approved.len(), 2); // With cutoff 0.7 and 3 candidates, should approve 2 candidates
     assert!(approved.contains(&0)); // Should definitely approve candidate 0 (highest alignment)
@@ -154,19 +152,19 @@ fn test_approval_voting() {
 
 #[test]
 fn test_edge_cases() {
-    let (voter_vectors, candidate_vectors) = create_test_data();
+    let (voters, candidates) = create_test_data();
 
     // Test with zero winners
     let election = FPTPElection;
-    let winners = election.run(&voter_vectors, &candidate_vectors, 0);
+    let winners = election.run(&voters.vectors, &candidates.vectors, 0);
     assert_eq!(winners.len(), 0);
 
     // Test with more winners than candidates
-    let winners = election.run(&voter_vectors, &candidate_vectors, 5);
+    let winners = election.run(&voters.vectors, &candidates.vectors, 5);
     assert_eq!(winners.len(), 3); // Should return all candidates
 
     // Test with empty voter set
     let empty_voters = Array2::from_shape_vec((0, 2), vec![]).unwrap();
-    let winners = election.run(&empty_voters, &candidate_vectors, 1);
+    let winners = election.run(&empty_voters, &candidates.vectors, 1);
     assert_eq!(winners.len(), 0);
 }
