@@ -205,15 +205,15 @@ impl RCVElection {
 
         while winners_vec.is_empty() && !active_candidates.is_empty() {
             // Count first preferences
-            let mut counts: HashMap<CandidateId, usize> = HashMap::new();
-            for ballot in &ballots {
-                for &(cid, _) in ballot {
-                    if active_candidates.contains(&cid) {
-                        *counts.entry(cid).or_insert(0) += 1;
-                        break;
-                    }
-                }
-            }
+            let counts: HashMap<CandidateId, usize> = ballots
+                .iter()
+                .filter_map(|ballot| {
+                    ballot
+                        .iter()
+                        .find(|&&(cid, _)| active_candidates.contains(&cid))
+                        .map(|&(cid, _)| cid)
+                })
+                .counts();
 
             // Check for majority
             let total_votes: usize = counts.values().sum();
