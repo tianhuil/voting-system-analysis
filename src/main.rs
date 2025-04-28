@@ -7,6 +7,41 @@ use std::collections::{HashMap, HashSet};
 type CandidateId = i64;
 type VoterId = i64;
 
+struct Candidates {
+    vectors: Array2<f64>,
+}
+
+impl Candidates {
+    fn random(n_candidates: usize, dim: usize) -> Self {
+        let mut rng = rand::thread_rng();
+        let normal = Normal::new(0.0, 1.0).unwrap();
+        let vectors = Array2::from_shape_fn((n_candidates, dim), |_| normal.sample(&mut rng));
+        Self { vectors }
+    }
+}
+
+struct Voters {
+    vectors: Array2<f64>,
+}
+
+impl Voters {
+    fn random(n_voters: usize, dim: usize) -> Self {
+        let mut rng = rand::thread_rng();
+        let normal = Normal::new(0.0, 1.0).unwrap();
+        let vectors = Array2::from_shape_fn((n_voters, dim), |_| normal.sample(&mut rng));
+        Self { vectors }
+    }
+
+    fn perturb(&self, sigma: f64) -> Self {
+        let mut rng = rand::thread_rng();
+        let normal = Normal::new(0.0, sigma).unwrap();
+        let perturbation = Array2::from_shape_fn(self.vectors.dim(), |_| normal.sample(&mut rng));
+        Self {
+            vectors: &self.vectors + &perturbation,
+        }
+    }
+}
+
 trait Election {
     fn name(&self) -> &'static str;
     fn run(&self, voter_vectors: &Array2<f64>, candidate_vectors: &Array2<f64>, winners: usize) -> Vec<CandidateId>;
@@ -195,25 +230,57 @@ impl Election for ApprovalVotingElection {
     }
 }
 
+fn run_single_winner_election<E: Election>(
+    election: &E,
+    candidates: &Candidates,
+    true_voters: &Voters,
+    perturbed_voters: &[Voters],
+) -> f64 {
+    let true_winner = election.run(&true_voters.vectors, &candidates.vectors, 1)[0];
+    let matches: f64 = perturbed_voters
+        .iter()
+        .map(|voters| {
+            let winner = election.run(&voters.vectors, &candidates.vectors, 1)[0];
+            if winner == true_winner {
+                1.0
+            } else {
+                0.0
+            }
+        })
+        .sum();
+    matches / perturbed_voters.len() as f64
+}
+
 fn main() {
     // Example usage
-    let n_voters = 1000;
-    let n_candidates = 10;
     let dimension = 3;
+    let n_candidates = 10;
+    let n_voters = 1000;
+    let winners = 1;
+    let sigma = 0.4;
+    let iterations = 100;
 
-    // Create random voter and candidate vectors
-    let mut rng = rand::thread_rng();
-    let normal = Normal::new(0.0, 1.0).unwrap();
-    
-    let voter_vectors = Array2::from_shape_fn((n_voters, dimension), |_| normal.sample(&mut rng));
-    let candidate_vectors = Array2::from_shape_fn((n_candidates, dimension), |_| normal.sample(&mut rng));
+    let candidates = Candidates::random(n_candidates, dimension);
+    let voters = Voters::random(n_voters, dimension);
+    let perturbed_voters: Vec<Voters> = (0..iterations)
+        .map(|_| voters.perturb(sigma))
+        .collect();
 
-    // Run elections
+    // Run single winner elections
     let fptp = FPTPElection;
     let rcv = RCVElection;
     let approval = ApprovalVotingElection { cutoff: 0.5 };
 
-    println!("FPTP winners: {:?}", fptp.run(&voter_vectors, &candidate_vectors, 1));
-    println!("RCV winners: {:?}", rcv.run(&voter_vectors, &candidate_vectors, 1));
-    println!("Approval winners: {:?}", approval.run(&voter_vectors, &candidate_vectors, 1));
+    println!(
+        "FPTP Match: {}",
+        run_single_winner_election(&fptp, &candidates, &voters, &perturbed_voters)
+    );
+    println!(
+        "RCV Match: {}",
+        run_single_winner_election(&rcv, &candidates, &voters, &perturbed_voters)
+    );
+    println!(
+        "Approval Match: {}",
+        run_single_winner_election(&approval, &candidates, &voters, &perturbed_voters)
+    );
 } 
