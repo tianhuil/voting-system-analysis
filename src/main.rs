@@ -284,17 +284,63 @@ impl Election for ApprovalVotingElection {
 }
 
 ////////////////////////////////////////////////////////////
-/// Run single winner elections
+/// Execution functions
 ////////////////////////////////////////////////////////////
 
+/// Computes jackknife estimates of mean and standard error for a given aggregation function
+///
+/// # Arguments
+/// * `data` - Vector of samples
+/// * `f` - Aggregation function that takes a slice of samples and returns a f64
+///
+/// # Returns
+/// Tuple of (mean, standard_error)
+fn jackknife<T: Clone + Send + Sync, F>(data: &[T], f: F) -> (f64, f64)
+where
+    F: Fn(&[T]) -> f64 + Sync + Send,
+{
+    let n = data.len();
+    let mut theta_dots = Vec::with_capacity(n);
+
+    // Compute leave-one-out estimates in parallel
+    theta_dots = (0..n)
+        .into_par_iter()
+        .map(|i| {
+            let mut leave_one_out: Vec<T> = data.to_vec();
+            leave_one_out.remove(i);
+            f(&leave_one_out)
+        })
+        .collect();
+
+    // Compute jackknife mean
+    let theta_dot = theta_dots.iter().sum::<f64>() / n as f64;
+
+    // Compute jackknife standard error
+    let variance = theta_dots
+        .iter()
+        .map(|&x| {
+            let diff = x - theta_dot;
+            diff * diff
+        })
+        .sum::<f64>()
+        / (n - 1) as f64;
+
+    let stderr = (variance / n as f64).sqrt();
+
+    (theta_dot, stderr)
+}
+
+////////////////////////////////////////////////////////////
+/// Run single winner elections
+////////////////////////////////////////////////////////////
 fn run_single_winner_election<E: Election + Sync>(
     election: &E,
     candidates: &Candidates,
     true_voters: &Voters,
     perturbed_voters: &[Voters],
-) -> f64 {
+) -> (f64, f64) {
     let true_winner = election.run(&true_voters.vectors, &candidates.vectors, 1)[0];
-    let matches: f64 = perturbed_voters
+    let matches: Vec<f64> = perturbed_voters
         .par_iter()
         .map(|voters| {
             let winner = election.run(&voters.vectors, &candidates.vectors, 1)[0];
@@ -304,15 +350,22 @@ fn run_single_winner_election<E: Election + Sync>(
                 0.0
             }
         })
-        .sum();
-    matches / perturbed_voters.len() as f64
+        .collect();
+
+    let (mean, stderr) = jackknife(&matches, |slice| {
+        slice.iter().sum::<f64>() / slice.len() as f64
+    });
+
+    println!("{}: {:.4} +/- {:.4}", election.name(), mean, stderr);
+
+    (mean, stderr)
 }
 
 fn main() {
     // Example usage
     let dimension = 3;
     let n_candidates = 10;
-    let n_voters = 1000;
+    let n_voters = 10_000;
     let winners = 1;
     let sigma = 0.3;
     let iterations = 100;
@@ -322,21 +375,12 @@ fn main() {
     let perturbed_voters: Vec<Voters> = (0..iterations).map(|_| voters.perturb(sigma)).collect();
 
     // Run single winner elections
-    println!(
-        "FPTP Match: {}",
-        run_single_winner_election(&FPTPElection, &candidates, &voters, &perturbed_voters)
-    );
-    println!(
-        "RCV Match: {}",
-        run_single_winner_election(&RCVElection, &candidates, &voters, &perturbed_voters)
-    );
-    println!(
-        "Approval Match: {}",
-        run_single_winner_election(
-            &ApprovalVotingElection { cutoff: 0.5 },
-            &candidates,
-            &voters,
-            &perturbed_voters
-        )
+    run_single_winner_election(&FPTPElection, &candidates, &voters, &perturbed_voters);
+    run_single_winner_election(&RCVElection, &candidates, &voters, &perturbed_voters);
+    run_single_winner_election(
+        &ApprovalVotingElection { cutoff: 0.5 },
+        &candidates,
+        &voters,
+        &perturbed_voters,
     );
 }
