@@ -32,41 +32,32 @@ VoterId = int
 class Candidates:
     """Numba-compatible candidates data structure"""
 
-    ids: np.ndarray  # Array of candidate IDs
     vectors: np.ndarray  # 2D array of candidate vectors [n_candidates, dimension]
 
     @classmethod
     def random(cls, n_candidates: int, dim: int) -> "Candidates":
         """Create random candidates"""
-        ids = np.arange(n_candidates, dtype=np.int64)
         vectors = np.random.normal(loc=0.0, scale=1.0, size=(n_candidates, dim))
-        return cls(ids, vectors)
+        return cls(vectors)
 
 
 @dataclass
 class Voters:
     """Numba-compatible voters data structure"""
 
-    ids: np.ndarray  # Array of voter IDs
     vectors: np.ndarray  # 2D array of voter vectors [n_voters, dimension]
 
     @classmethod
     def random(cls, n_voters: int, dim: int) -> "Voters":
         """Create random voters"""
-        ids = np.arange(n_voters, dtype=np.int64)
         vectors = np.random.normal(loc=0.0, scale=1.0, size=(n_voters, dim))
-        return cls(ids, vectors)
-
-    def get_voter(self, idx: int) -> Tuple[VoterId, np.ndarray]:
-        """Get voter by index"""
-        return self.ids[idx], self.vectors[idx]
+        return cls(vectors)
 
     def perturb(self, sigma: float) -> "Voters":
         """Create perturbed voters"""
         return Voters(
-            self.ids,
             self.vectors
-            + np.random.normal(loc=0.0, scale=sigma, size=self.vectors.shape),
+            + np.random.normal(loc=0.0, scale=sigma, size=self.vectors.shape)
         )
 
 
@@ -98,7 +89,14 @@ class Election(ABC, Generic[BallotType]):
 def rank_by_distance(
     voter_vector: np.ndarray, candidate_vectors: np.ndarray
 ) -> np.ndarray:
-    """Numba-compatible function to rank candidates by distance"""
+    """
+    Numba-compatible function to rank candidates by distance
+    Args:
+        voter_vector: The vector of the voter
+        candidate_vectors: The vectors of the candidates (first index is the candidate index)
+    Returns:
+        The indices of the candidates sorted in descending preference
+    """
     n_candidates = candidate_vectors.shape[0]
     distances = np.zeros(n_candidates)
     for i in range(n_candidates):
@@ -124,21 +122,17 @@ class FPTPElection(Election[FPTPBallot]):
         ranked_indices = rank_by_distance(voter_vector, self.candidates.vectors)
         return Ballot(
             voter_id=voter_id,
-            data=int(self.candidates.ids[ranked_indices[0]]),
+            data=int(ranked_indices[0]),
         )
 
     def run(self, voters: Voters) -> List[Tuple[CandidateId, np.ndarray]]:
         ballots = [
-            self.cast_ballot(voters.ids[i], voters.vectors[i])
-            for i in range(len(voters.ids))
+            self.cast_ballot(i, voters.vectors[i]) for i in range(len(voters.vectors))
         ]
         candidate_ids = [b.data for b in ballots]
         counts = Counter(candidate_ids)
         winner_counts = counts.most_common(self.winners)
-        return [
-            (cid, self.candidates.vectors[self.candidates.ids == cid][0])
-            for cid, _ in winner_counts
-        ]
+        return [(cid, self.candidates.vectors[cid]) for cid, _ in winner_counts]
 
 
 ########################################################
@@ -159,18 +153,14 @@ class RCVElection(Election[RankedBallot]):
         ranked_indices = rank_by_distance(voter_vector, self.candidates.vectors)
         return Ballot(
             voter_id=voter_id,
-            data={
-                int(self.candidates.ids[idx]): rank
-                for rank, idx in enumerate(ranked_indices, 1)
-            },
+            data={int(idx): rank for rank, idx in enumerate(ranked_indices, 1)},
         )
 
     def run(self, voters: Voters) -> List[Tuple[CandidateId, np.ndarray]]:
         ballots = [
-            self.cast_ballot(voters.ids[i], voters.vectors[i])
-            for i in range(len(voters.ids))
+            self.cast_ballot(i, voters.vectors[i]) for i in range(len(voters.vectors))
         ]
-        active_candidates = set(self.candidates.ids)
+        active_candidates = set(range(len(self.candidates.vectors)))
         winners: List[Tuple[CandidateId, np.ndarray]] = []
 
         while len(winners) < self.winners and active_candidates:
@@ -202,7 +192,7 @@ class RCVElection(Election[RankedBallot]):
                         winners.append(
                             (
                                 cid,
-                                self.candidates.vectors[self.candidates.ids == cid][0],
+                                self.candidates.vectors[cid],
                             )
                         )
                         return winners
@@ -219,7 +209,7 @@ class RCVElection(Election[RankedBallot]):
                         winners.append(
                             (
                                 cid,
-                                self.candidates.vectors[self.candidates.ids == cid][0],
+                                self.candidates.vectors[cid],
                             )
                         )
                         active_candidates.remove(cid)
@@ -257,12 +247,11 @@ class STVElection(RCVElection):
 
     def run(self, voters: Voters) -> List[Tuple[CandidateId, np.ndarray]]:
         ballots = [
-            self.cast_ballot(voters.ids[i], voters.vectors[i])
-            for i in range(len(voters.ids))
+            self.cast_ballot(i, voters.vectors[i]) for i in range(len(voters.vectors))
         ]
         active_candidates = {
-            cid: self.candidates.vectors[self.candidates.ids == cid][0]
-            for cid in self.candidates.ids
+            cid: self.candidates.vectors[cid]
+            for cid in range(len(self.candidates.vectors))
         }
         winners: List[Tuple[CandidateId, np.ndarray]] = []
         quota = len(ballots) / (self.winners + 1) + 1
@@ -337,23 +326,19 @@ class ApprovalVotingElection(Election[ApprovalBallot]):
         approved_candidates = ranked_indices[:approved_count]
         return Ballot(
             voter_id=voter_id,
-            data={int(self.candidates.ids[idx]) for idx in approved_candidates},
+            data={int(idx) for idx in approved_candidates},
         )
 
     def run(self, voters: Voters) -> List[Tuple[CandidateId, np.ndarray]]:
         ballots = [
-            self.cast_ballot(voters.ids[i], voters.vectors[i])
-            for i in range(len(voters.ids))
+            self.cast_ballot(i, voters.vectors[i]) for i in range(len(voters.vectors))
         ]
         candidate_ids = [
             candidate_id for ballot in ballots for candidate_id in ballot.data
         ]
         counts = Counter(candidate_ids)
         winner_counts = counts.most_common(self.winners)
-        return [
-            (cid, self.candidates.vectors[self.candidates.ids == cid][0])
-            for cid, _ in winner_counts
-        ]
+        return [(cid, self.candidates.vectors[cid]) for cid, _ in winner_counts]
 
 
 ########################################################
@@ -380,23 +365,19 @@ class LimitedVotingElection(Election[LimitedBallot]):
         chosen = ranked_indices[: self.max_choices]
         return Ballot(
             voter_id=voter_id,
-            data={int(self.candidates.ids[idx]) for idx in chosen},
+            data={int(idx) for idx in chosen},
         )
 
     def run(self, voters: Voters) -> List[Tuple[CandidateId, np.ndarray]]:
         ballots = [
-            self.cast_ballot(voters.ids[i], voters.vectors[i])
-            for i in range(len(voters.ids))
+            self.cast_ballot(i, voters.vectors[i]) for i in range(len(voters.vectors))
         ]
         candidate_ids = [
             candidate_id for ballot in ballots for candidate_id in ballot.data
         ]
         counts = Counter(candidate_ids)
         winner_counts = counts.most_common(self.winners)
-        return [
-            (cid, self.candidates.vectors[self.candidates.ids == cid][0])
-            for cid, _ in winner_counts
-        ]
+        return [(cid, self.candidates.vectors[cid]) for cid, _ in winner_counts]
 
 
 def run_single_winner_election(
