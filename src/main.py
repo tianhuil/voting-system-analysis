@@ -61,17 +61,24 @@ class Voters:
 
 
 class Election(ABC, Generic[BallotType]):
-    def __init__(self, candidates: Candidates, winners: int = 1):
-        self.candidates = candidates
-        self.winners = winners
+    """Base class for election systems"""
 
+    name: str = "BASE"
+
+    @staticmethod
     @abstractmethod
-    def cast_ballot(self, voter_vector: np.ndarray) -> BallotType:
+    def cast_ballot(
+        voter_vector: np.ndarray, candidate_vectors: np.ndarray, **kwargs
+    ) -> BallotType:
         """Cast a ballot for a voter based on the election rules"""
         pass
 
+    @staticmethod
     @abstractmethod
-    def run(self, voters: Voters) -> List[CandidateId]:
+    def run(
+        voters: Voters, candidates: Candidates, winners: int = 1, **kwargs
+    ) -> List[CandidateId]:
+        """Run the election and return the winners"""
         pass
 
 
@@ -152,12 +159,18 @@ def _fptp_run(
 class FPTPElection(Election[CandidateId]):
     name: str = "FPTP"
 
-    def cast_ballot(self, voter_vector: np.ndarray) -> CandidateId:
-        return _fptp_cast_ballot(voter_vector, self.candidates.vectors)
+    @staticmethod
+    def cast_ballot(
+        voter_vector: np.ndarray, candidate_vectors: np.ndarray, **kwargs
+    ) -> CandidateId:
+        return _fptp_cast_ballot(voter_vector, candidate_vectors)
 
-    def run(self, voters: Voters) -> List[CandidateId]:
-        winners = _fptp_run(voters.vectors, self.candidates.vectors, self.winners)
-        return [int(cid) for cid in winners]
+    @staticmethod
+    def run(
+        voters: Voters, candidates: Candidates, winners: int = 1, **kwargs
+    ) -> List[CandidateId]:
+        winners_array = _fptp_run(voters.vectors, candidates.vectors, winners)
+        return [int(cid) for cid in winners_array]
 
 
 ########################################################
@@ -268,13 +281,19 @@ def _rcv_run(
 class RCVElection(Election[Dict[CandidateId, int]]):
     name: str = "RCV"
 
-    def cast_ballot(self, voter_vector: np.ndarray) -> Dict[CandidateId, int]:
-        ballot_array = _rcv_cast_ballot(voter_vector, self.candidates.vectors)
+    @staticmethod
+    def cast_ballot(
+        voter_vector: np.ndarray, candidate_vectors: np.ndarray, **kwargs
+    ) -> Dict[CandidateId, int]:
+        ballot_array = _rcv_cast_ballot(voter_vector, candidate_vectors)
         return {int(row[0]): int(row[1]) for row in ballot_array}
 
-    def run(self, voters: Voters) -> List[CandidateId]:
-        winners = _rcv_run(voters.vectors, self.candidates.vectors, self.winners)
-        return [int(cid) for cid in winners]
+    @staticmethod
+    def run(
+        voters: Voters, candidates: Candidates, winners: int = 1, **kwargs
+    ) -> List[CandidateId]:
+        winners_array = _rcv_run(voters.vectors, candidates.vectors, winners)
+        return [int(cid) for cid in winners_array]
 
 
 ########################################################
@@ -285,18 +304,21 @@ class STVElection(RCVElection):
 
     name: str = "STV"
 
-    def run(self, voters: Voters) -> List[CandidateId]:
+    @staticmethod
+    def run(
+        voters: Voters, candidates: Candidates, winners: int = 1, **kwargs
+    ) -> List[CandidateId]:
         ballots = [
-            self.cast_ballot(voters.vectors[i]) for i in range(len(voters.vectors))
+            STVElection.cast_ballot(voters.vectors[i], candidates.vectors)
+            for i in range(len(voters.vectors))
         ]
         active_candidates = {
-            cid: self.candidates.vectors[cid]
-            for cid in range(len(self.candidates.vectors))
+            cid: candidates.vectors[cid] for cid in range(len(candidates.vectors))
         }
-        winners: List[CandidateId] = []
-        quota = len(ballots) / (self.winners + 1) + 1
+        winners_list: List[CandidateId] = []
+        quota = len(ballots) / (winners + 1) + 1
 
-        while len(winners) < self.winners and active_candidates:
+        while len(winners_list) < winners and active_candidates:
             counts: Dict[CandidateId, float] = {cid: 0.0 for cid in active_candidates}
             for ballot in ballots:
                 valid_ranks = {
@@ -310,7 +332,7 @@ class STVElection(RCVElection):
 
             elected = [cid for cid, count in counts.items() if count >= quota]
             for cid in elected:
-                winners.append(cid)
+                winners_list.append(cid)
                 active_candidates.pop(cid)
                 surplus = counts[cid] - quota
 
@@ -332,7 +354,7 @@ class STVElection(RCVElection):
                 eliminate_cid = min(counts, key=lambda k: counts[k])
                 active_candidates.pop(eliminate_cid)
 
-        return winners
+        return winners_list
 
 
 ########################################################
@@ -375,21 +397,28 @@ class ApprovalVotingElection(Election[Set[CandidateId]]):
 
     name: str = "APPROVAL"
 
-    def __init__(self, candidates: Candidates, winners: int = 1, cutoff: float = 0.5):
-        super().__init__(candidates, winners)
-        self.cutoff = cutoff
-
-    def cast_ballot(self, voter_vector: np.ndarray) -> Set[CandidateId]:
+    @staticmethod
+    def cast_ballot(
+        voter_vector: np.ndarray,
+        candidate_vectors: np.ndarray,
+        cutoff: float = 0.5,
+    ) -> Set[CandidateId]:
         approved_indices = _approval_cast_ballot(
-            voter_vector, self.candidates.vectors, self.cutoff
+            voter_vector, candidate_vectors, cutoff
         )
         return {int(idx) for idx in approved_indices}
 
-    def run(self, voters: Voters) -> List[CandidateId]:
-        winners = _approval_run(
-            voters.vectors, self.candidates.vectors, self.winners, self.cutoff
+    @staticmethod
+    def run(
+        voters: Voters,
+        candidates: Candidates,
+        winners: int = 1,
+        cutoff: float = 0.5,
+    ) -> List[CandidateId]:
+        winners_array = _approval_run(
+            voters.vectors, candidates.vectors, winners, cutoff
         )
-        return [int(cid) for cid in winners]
+        return [int(cid) for cid in winners_array]
 
 
 ########################################################
@@ -429,29 +458,41 @@ class LimitedVotingElection(Election[List[CandidateId]]):
 
     name: str = "LIMITED"
 
-    def __init__(self, candidates: Candidates, winners: int = 1, max_choices: int = 3):
-        super().__init__(candidates, winners)
-        self.max_choices = max_choices
+    @staticmethod
+    def cast_ballot(
+        voter_vector: np.ndarray,
+        candidate_vectors: np.ndarray,
+        max_choices: int = 3,
+        **kwargs,
+    ) -> List[CandidateId]:
+        return _limited_cast_ballot(voter_vector, candidate_vectors, max_choices)
 
-    def cast_ballot(self, voter_vector: np.ndarray) -> List[CandidateId]:
-        return _limited_cast_ballot(
-            voter_vector, self.candidates.vectors, self.max_choices
+    @staticmethod
+    def run(
+        voters: Voters,
+        candidates: Candidates,
+        winners: int = 1,
+        max_choices: int = 3,
+        **kwargs,
+    ) -> List[CandidateId]:
+        winners_array = _limited_run(
+            voters.vectors, candidates.vectors, winners, max_choices
         )
-
-    def run(self, voters: Voters) -> List[CandidateId]:
-        winners = _limited_run(
-            voters.vectors, self.candidates.vectors, self.winners, self.max_choices
-        )
-        return [int(cid) for cid in winners]
+        return [int(cid) for cid in winners_array]
 
 
 def run_single_winner_election(
-    election: Election,
+    election_class: Type[Election],
+    candidates: Candidates,
     true_voters: Voters,
     perturbed_voters: Sequence[Voters],
+    **kwargs,
 ) -> float:
-    true_winner = election.run(true_voters)[0]
-    perturbed_winners = [election.run(voters)[0] for voters in perturbed_voters]
+    true_winner = election_class.run(true_voters, candidates, winners=1, **kwargs)[0]
+    perturbed_winners = [
+        election_class.run(voters, candidates, winners=1, **kwargs)[0]
+        for voters in perturbed_voters
+    ]
     return float(np.mean([winner == true_winner for winner in perturbed_winners]))
 
 
@@ -469,16 +510,12 @@ if __name__ == "__main__":
     perturbed_voters = [voters.perturb(SIGMA) for _ in range(ITERATIONS)]
 
     # single winner elections
-    fptp_election = FPTPElection(candidates, 1)
-    rcv_election = RCVElection(candidates, 1)
-    approval_election = ApprovalVotingElection(candidates, 1)
-
     print(
-        f"FPTP Match: {run_single_winner_election(fptp_election, voters, perturbed_voters)}"
+        f"FPTP Match: {run_single_winner_election(FPTPElection, candidates, voters, perturbed_voters)}"
     )
     print(
-        f"RCV Match: {run_single_winner_election(rcv_election, voters, perturbed_voters)}"
+        f"RCV Match: {run_single_winner_election(RCVElection, candidates, voters, perturbed_voters)}"
     )
     print(
-        f"Approval Match: {run_single_winner_election(approval_election, voters, perturbed_voters)}"
+        f"Approval Match: {run_single_winner_election(ApprovalVotingElection, candidates, voters, perturbed_voters, cutoff=0.5)}"
     )
