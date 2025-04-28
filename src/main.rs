@@ -1,4 +1,4 @@
-use ndarray::{Array1, Array2};
+use ndarray::{Array1, Array2, Axis};
 use num::Float;
 use rand::prelude::*;
 use rand_distr::Normal;
@@ -8,6 +8,16 @@ use std::collections::{HashMap, HashSet};
 type CandidateId = i64;
 type VoterId = i64;
 
+/// Normalizes a 2D array of vectors so each row has unit length
+fn normalize_vectors(vectors: &mut Array2<f64>) {
+    let norms = vectors.map_axis(Axis(1), |row| row.mapv(|x| x * x).sum().sqrt());
+    for (mut row, &norm) in vectors.rows_mut().into_iter().zip(norms.iter()) {
+        if norm > 0.0 {
+            row.mapv_inplace(|x| x / norm);
+        }
+    }
+}
+
 struct Candidates {
     vectors: Array2<f64>,
 }
@@ -16,7 +26,8 @@ impl Candidates {
     fn random(n_candidates: usize, dim: usize) -> Self {
         let mut rng = rand::thread_rng();
         let normal = Normal::new(0.0, 1.0).unwrap();
-        let vectors = Array2::from_shape_fn((n_candidates, dim), |_| normal.sample(&mut rng));
+        let mut vectors = Array2::from_shape_fn((n_candidates, dim), |_| normal.sample(&mut rng));
+        normalize_vectors(&mut vectors);
         Self { vectors }
     }
 }
@@ -29,7 +40,8 @@ impl Voters {
     fn random(n_voters: usize, dim: usize) -> Self {
         let mut rng = rand::thread_rng();
         let normal = Normal::new(0.0, 1.0).unwrap();
-        let vectors = Array2::from_shape_fn((n_voters, dim), |_| normal.sample(&mut rng));
+        let mut vectors = Array2::from_shape_fn((n_voters, dim), |_| normal.sample(&mut rng));
+        normalize_vectors(&mut vectors);
         Self { vectors }
     }
 
@@ -37,9 +49,9 @@ impl Voters {
         let mut rng = rand::thread_rng();
         let normal = Normal::new(0.0, sigma).unwrap();
         let perturbation = Array2::from_shape_fn(self.vectors.dim(), |_| normal.sample(&mut rng));
-        Self {
-            vectors: &self.vectors + &perturbation,
-        }
+        let mut vectors = &self.vectors + &perturbation;
+        normalize_vectors(&mut vectors);
+        Self { vectors }
     }
 }
 
