@@ -1,4 +1,42 @@
-use super::*;
+use super::{
+    normalize_vectors, rank_by_alignment, ApprovalVotingElection, Candidates, Election,
+    FPTPElection, RCVElection, Voters,
+};
+use ndarray::{Array1, Array2};
+
+#[test]
+fn test_rank_by_alignment() {
+    let voter = Voters::normalize(
+        &Array2::from_shape_vec((1, 2), Array1::from_vec(vec![0.0, 1.0]).to_vec()).unwrap(),
+    );
+
+    // Use Candidates.normalize and Voters.normalize
+    let candidates = Candidates::normalize(
+        &Array2::from_shape_vec(
+            (3, 2),
+            vec![
+                0.0, 1.0, // Candidate 0: Perfect alignment (0,1)
+                1.0, 1.0, // Candidate 1: Diagonal (1,1)
+                0.0, -1.0, // Candidate 2: Opposite (0,-1)
+            ],
+        )
+        .unwrap(),
+    );
+
+    // Get rankings using the normalized vectors
+    let rankings = rank_by_alignment(&voter.vectors.row(0).to_owned(), &candidates.vectors);
+
+    // Check the order is correct
+    assert_eq!(rankings[0].0, 0); // First should be the perfectly aligned candidate
+    assert_eq!(rankings[1].0, 1); // Second should be the diagonal candidate
+    assert_eq!(rankings[2].0, 2); // Last should be the opposite candidate
+
+    // Check alignment values
+    assert!((rankings[0].1 - 1.0).abs() < 1e-10); // Perfect alignment should be ~1.0
+    assert!(rankings[0].1 > rankings[1].1); // Perfect alignment should be higher than diagonal
+    assert!(rankings[1].1 > rankings[2].1); // Diagonal should be higher than opposite
+    assert!((rankings[2].1 + 1.0).abs() < 1e-10); // Opposite alignment should be ~-1.0
+}
 
 fn create_test_data() -> (Array2<f64>, Array2<f64>) {
     // Create 3 candidates in 2D space

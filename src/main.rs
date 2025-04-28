@@ -21,10 +21,16 @@ struct Candidates {
 }
 
 impl Candidates {
-    fn random(n_candidates: usize, dim: usize) -> Self {
+    pub fn random(n_candidates: usize, dim: usize) -> Self {
         let mut rng = rand::thread_rng();
         let normal = Normal::new(0.0, 1.0).unwrap();
         let mut vectors = Array2::from_shape_fn((n_candidates, dim), |_| normal.sample(&mut rng));
+        normalize_vectors(&mut vectors);
+        Self { vectors }
+    }
+
+    pub fn normalize(raw_vectors: &Array2<f64>) -> Self {
+        let mut vectors = raw_vectors.clone();
         normalize_vectors(&mut vectors);
         Self { vectors }
     }
@@ -35,7 +41,7 @@ struct Voters {
 }
 
 impl Voters {
-    fn random(n_voters: usize, dim: usize) -> Self {
+    pub fn random(n_voters: usize, dim: usize) -> Self {
         let mut rng = rand::thread_rng();
         let normal = Normal::new(0.0, 1.0).unwrap();
         let mut vectors = Array2::from_shape_fn((n_voters, dim), |_| normal.sample(&mut rng));
@@ -43,11 +49,17 @@ impl Voters {
         Self { vectors }
     }
 
-    fn perturb(&self, sigma: f64) -> Self {
+    pub fn perturb(&self, sigma: f64) -> Self {
         let mut rng = rand::thread_rng();
         let normal = Normal::new(0.0, sigma).unwrap();
         let perturbation = Array2::from_shape_fn(self.vectors.dim(), |_| normal.sample(&mut rng));
         let mut vectors = &self.vectors + &perturbation;
+        normalize_vectors(&mut vectors);
+        Self { vectors }
+    }
+
+    pub fn normalize(raw_vectors: &Array2<f64>) -> Self {
+        let mut vectors = raw_vectors.clone();
         normalize_vectors(&mut vectors);
         Self { vectors }
     }
