@@ -81,7 +81,7 @@ class Election(ABC, Generic[BallotType]):
         pass
 
     @abstractmethod
-    def run(self, voters: Voters) -> List[Tuple[CandidateId, np.ndarray]]:
+    def run(self, voters: Voters) -> List[CandidateId]:
         pass
 
 
@@ -125,14 +125,14 @@ class FPTPElection(Election[FPTPBallot]):
             data=int(ranked_indices[0]),
         )
 
-    def run(self, voters: Voters) -> List[Tuple[CandidateId, np.ndarray]]:
+    def run(self, voters: Voters) -> List[CandidateId]:
         ballots = [
             self.cast_ballot(i, voters.vectors[i]) for i in range(len(voters.vectors))
         ]
         candidate_ids = [b.data for b in ballots]
         counts = Counter(candidate_ids)
         winner_counts = counts.most_common(self.winners)
-        return [(cid, self.candidates.vectors[cid]) for cid, _ in winner_counts]
+        return [cid for cid, _ in winner_counts]
 
 
 ########################################################
@@ -156,12 +156,12 @@ class RCVElection(Election[RankedBallot]):
             data={int(idx): rank for rank, idx in enumerate(ranked_indices, 1)},
         )
 
-    def run(self, voters: Voters) -> List[Tuple[CandidateId, np.ndarray]]:
+    def run(self, voters: Voters) -> List[CandidateId]:
         ballots = [
             self.cast_ballot(i, voters.vectors[i]) for i in range(len(voters.vectors))
         ]
         active_candidates = set(range(len(self.candidates.vectors)))
-        winners: List[Tuple[CandidateId, np.ndarray]] = []
+        winners: List[CandidateId] = []
 
         while len(winners) < self.winners and active_candidates:
             # Count current votes
@@ -189,12 +189,7 @@ class RCVElection(Election[RankedBallot]):
                 majority = total / 2
                 for cid, count in counts.items():
                     if count > majority:
-                        winners.append(
-                            (
-                                cid,
-                                self.candidates.vectors[cid],
-                            )
-                        )
+                        winners.append(cid)
                         return winners
 
                 # Eliminate last place
@@ -206,12 +201,7 @@ class RCVElection(Election[RankedBallot]):
 
                 if elected:
                     for cid in elected:
-                        winners.append(
-                            (
-                                cid,
-                                self.candidates.vectors[cid],
-                            )
-                        )
+                        winners.append(cid)
                         active_candidates.remove(cid)
 
                     # Transfer surplus votes (simplified)
@@ -245,7 +235,7 @@ class STVElection(RCVElection):
 
     name: str = "STV"
 
-    def run(self, voters: Voters) -> List[Tuple[CandidateId, np.ndarray]]:
+    def run(self, voters: Voters) -> List[CandidateId]:
         ballots = [
             self.cast_ballot(i, voters.vectors[i]) for i in range(len(voters.vectors))
         ]
@@ -253,7 +243,7 @@ class STVElection(RCVElection):
             cid: self.candidates.vectors[cid]
             for cid in range(len(self.candidates.vectors))
         }
-        winners: List[Tuple[CandidateId, np.ndarray]] = []
+        winners: List[CandidateId] = []
         quota = len(ballots) / (self.winners + 1) + 1
 
         while len(winners) < self.winners and active_candidates:
@@ -274,7 +264,8 @@ class STVElection(RCVElection):
             # Elect candidates meeting quota
             elected = [cid for cid, count in counts.items() if count >= quota]
             for cid in elected:
-                winners.append((cid, active_candidates.pop(cid)))
+                winners.append(cid)
+                active_candidates.pop(cid)
                 surplus = counts[cid] - quota
 
                 # Transfer surplus votes
@@ -329,7 +320,7 @@ class ApprovalVotingElection(Election[ApprovalBallot]):
             data={int(idx) for idx in approved_candidates},
         )
 
-    def run(self, voters: Voters) -> List[Tuple[CandidateId, np.ndarray]]:
+    def run(self, voters: Voters) -> List[CandidateId]:
         ballots = [
             self.cast_ballot(i, voters.vectors[i]) for i in range(len(voters.vectors))
         ]
@@ -338,7 +329,7 @@ class ApprovalVotingElection(Election[ApprovalBallot]):
         ]
         counts = Counter(candidate_ids)
         winner_counts = counts.most_common(self.winners)
-        return [(cid, self.candidates.vectors[cid]) for cid, _ in winner_counts]
+        return [cid for cid, _ in winner_counts]
 
 
 ########################################################
@@ -368,7 +359,7 @@ class LimitedVotingElection(Election[LimitedBallot]):
             data={int(idx) for idx in chosen},
         )
 
-    def run(self, voters: Voters) -> List[Tuple[CandidateId, np.ndarray]]:
+    def run(self, voters: Voters) -> List[CandidateId]:
         ballots = [
             self.cast_ballot(i, voters.vectors[i]) for i in range(len(voters.vectors))
         ]
@@ -377,7 +368,7 @@ class LimitedVotingElection(Election[LimitedBallot]):
         ]
         counts = Counter(candidate_ids)
         winner_counts = counts.most_common(self.winners)
-        return [(cid, self.candidates.vectors[cid]) for cid, _ in winner_counts]
+        return [cid for cid, _ in winner_counts]
 
 
 def run_single_winner_election(
@@ -385,8 +376,8 @@ def run_single_winner_election(
     true_voters: Voters,
     perturbed_voters: Sequence[Voters],
 ) -> float:
-    true_winner = election.run(true_voters)[0][0]
-    perturbed_winners = [election.run(voters)[0][0] for voters in perturbed_voters]
+    true_winner = election.run(true_voters)[0]
+    perturbed_winners = [election.run(voters)[0] for voters in perturbed_voters]
     return float(np.mean([winner == true_winner for winner in perturbed_winners]))
 
 
