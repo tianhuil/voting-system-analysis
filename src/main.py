@@ -67,7 +67,7 @@ class Election(ABC, Generic[BallotType]):
         self.rounds: List[Dict] = []
 
     @abstractmethod
-    def cast_ballot(self, voter_id: VoterId, voter_vector: np.ndarray) -> BallotType:
+    def cast_ballot(self, voter_vector: np.ndarray) -> BallotType:
         """Cast a ballot for a voter based on the election rules"""
         pass
 
@@ -133,13 +133,13 @@ def count_occurrences(items):
 class FPTPElection(Election[CandidateId]):
     name: str = "FPTP"
 
-    def cast_ballot(self, voter_id: VoterId, voter_vector: np.ndarray) -> CandidateId:
+    def cast_ballot(self, voter_vector: np.ndarray) -> CandidateId:
         ranked_indices = rank_by_distance(voter_vector, self.candidates.vectors)
         return int(ranked_indices[0])
 
     def run(self, voters: Voters) -> List[CandidateId]:
         candidate_ids = [
-            self.cast_ballot(i, voters.vectors[i]) for i in range(len(voters.vectors))
+            self.cast_ballot(voters.vectors[i]) for i in range(len(voters.vectors))
         ]
         winner_counts = count_occurrences(candidate_ids)
         return [cid for cid, _ in winner_counts[: self.winners]]
@@ -151,15 +151,13 @@ class FPTPElection(Election[CandidateId]):
 class RCVElection(Election[Dict[CandidateId, int]]):
     name: str = "RCV"
 
-    def cast_ballot(
-        self, voter_id: VoterId, voter_vector: np.ndarray
-    ) -> Dict[CandidateId, int]:
+    def cast_ballot(self, voter_vector: np.ndarray) -> Dict[CandidateId, int]:
         ranked_indices = rank_by_distance(voter_vector, self.candidates.vectors)
         return {int(idx): rank for rank, idx in enumerate(ranked_indices, 1)}
 
     def run(self, voters: Voters) -> List[CandidateId]:
         ballots = [
-            self.cast_ballot(i, voters.vectors[i]) for i in range(len(voters.vectors))
+            self.cast_ballot(voters.vectors[i]) for i in range(len(voters.vectors))
         ]
         active_candidates = set(range(len(self.candidates.vectors)))
         winners: List[CandidateId] = []
@@ -232,7 +230,7 @@ class STVElection(RCVElection):
 
     def run(self, voters: Voters) -> List[CandidateId]:
         ballots = [
-            self.cast_ballot(i, voters.vectors[i]) for i in range(len(voters.vectors))
+            self.cast_ballot(voters.vectors[i]) for i in range(len(voters.vectors))
         ]
         active_candidates = {
             cid: self.candidates.vectors[cid]
@@ -294,9 +292,7 @@ class ApprovalVotingElection(Election[Set[CandidateId]]):
         super().__init__(candidates, winners)
         self.cutoff = cutoff
 
-    def cast_ballot(
-        self, voter_id: VoterId, voter_vector: np.ndarray
-    ) -> Set[CandidateId]:
+    def cast_ballot(self, voter_vector: np.ndarray) -> Set[CandidateId]:
         ranked_indices = rank_by_distance(voter_vector, self.candidates.vectors)
         approved_count = int(len(ranked_indices) * self.cutoff)
         approved_candidates = ranked_indices[:approved_count]
@@ -306,7 +302,7 @@ class ApprovalVotingElection(Election[Set[CandidateId]]):
         candidate_ids = [
             candidate_id
             for i in range(len(voters.vectors))
-            for candidate_id in self.cast_ballot(i, voters.vectors[i])
+            for candidate_id in self.cast_ballot(voters.vectors[i])
         ]
         winner_counts = count_occurrences(candidate_ids)
         return [cid for cid, _ in winner_counts[: self.winners]]
@@ -324,9 +320,7 @@ class LimitedVotingElection(Election[List[CandidateId]]):
         super().__init__(candidates, winners)
         self.max_choices = max_choices
 
-    def cast_ballot(
-        self, voter_id: VoterId, voter_vector: np.ndarray
-    ) -> List[CandidateId]:
+    def cast_ballot(self, voter_vector: np.ndarray) -> List[CandidateId]:
         ranked_indices = rank_by_distance(voter_vector, self.candidates.vectors)
         chosen = ranked_indices[: self.max_choices]
         return [int(idx) for idx in chosen]
@@ -335,7 +329,7 @@ class LimitedVotingElection(Election[List[CandidateId]]):
         candidate_ids = [
             candidate_id
             for i in range(len(voters.vectors))
-            for candidate_id in self.cast_ballot(i, voters.vectors[i])
+            for candidate_id in self.cast_ballot(voters.vectors[i])
         ]
         winner_counts = count_occurrences(candidate_ids)
         return [cid for cid, _ in winner_counts[: self.winners]]
