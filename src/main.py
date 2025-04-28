@@ -107,8 +107,6 @@ def rank_by_distance(
 ########################################################
 # First Past The Post (FPTP) System
 ########################################################
-
-
 class FPTPElection(Election[Ballot[CandidateId]]):
     name: str = "FPTP"
 
@@ -135,8 +133,6 @@ class FPTPElection(Election[Ballot[CandidateId]]):
 ########################################################
 # Ranked Choice Voting (RCV) System
 ########################################################
-
-
 class RCVElection(Election[Dict[CandidateId, int]]):
     name: str = "RCV"
 
@@ -222,8 +218,6 @@ class RCVElection(Election[Dict[CandidateId, int]]):
 ########################################################
 # Single Transferable Vote (STV) System
 ########################################################
-
-
 class STVElection(RCVElection):
     """Proper STV implementation with vote transfer"""
 
@@ -288,8 +282,6 @@ class STVElection(RCVElection):
 ########################################################
 # Approval Voting System
 ########################################################
-
-
 class ApprovalVotingElection(Election[Set[CandidateId]]):
     """Approval voting uses same counting as FPTP but different ballots"""
 
