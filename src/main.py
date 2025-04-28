@@ -131,7 +131,7 @@ def count_occurrences(items):
 # First Past The Post (FPTP) System
 ########################################################
 @njit
-def fptp_cast_ballot(
+def _fptp_cast_ballot(
     voter_vector: np.ndarray, candidate_vectors: np.ndarray
 ) -> CandidateId:
     ranked_indices = rank_by_distance(voter_vector, candidate_vectors)
@@ -142,7 +142,7 @@ class FPTPElection(Election[CandidateId]):
     name: str = "FPTP"
 
     def cast_ballot(self, voter_vector: np.ndarray) -> CandidateId:
-        return fptp_cast_ballot(voter_vector, self.candidates.vectors)
+        return _fptp_cast_ballot(voter_vector, self.candidates.vectors)
 
     def run(self, voters: Voters) -> List[CandidateId]:
         candidate_ids = [
@@ -156,7 +156,7 @@ class FPTPElection(Election[CandidateId]):
 # Ranked Choice Voting (RCV) System
 ########################################################
 @njit
-def rcv_cast_ballot(
+def _rcv_cast_ballot(
     voter_vector: np.ndarray, candidate_vectors: np.ndarray
 ) -> Dict[CandidateId, int]:
     ranked_indices = rank_by_distance(voter_vector, candidate_vectors)
@@ -167,7 +167,7 @@ class RCVElection(Election[Dict[CandidateId, int]]):
     name: str = "RCV"
 
     def cast_ballot(self, voter_vector: np.ndarray) -> Dict[CandidateId, int]:
-        return rcv_cast_ballot(voter_vector, self.candidates.vectors)
+        return _rcv_cast_ballot(voter_vector, self.candidates.vectors)
 
     def run(self, voters: Voters) -> List[CandidateId]:
         ballots = [
@@ -298,7 +298,7 @@ class STVElection(RCVElection):
 # Approval Voting System
 ########################################################
 @njit
-def approval_cast_ballot(
+def _approval_cast_ballot(
     voter_vector: np.ndarray, candidate_vectors: np.ndarray, cutoff: float
 ) -> np.ndarray:
     ranked_indices = rank_by_distance(voter_vector, candidate_vectors)
@@ -316,7 +316,7 @@ class ApprovalVotingElection(Election[Set[CandidateId]]):
         self.cutoff = cutoff
 
     def cast_ballot(self, voter_vector: np.ndarray) -> Set[CandidateId]:
-        approved_indices = approval_cast_ballot(
+        approved_indices = _approval_cast_ballot(
             voter_vector, self.candidates.vectors, self.cutoff
         )
         return {int(idx) for idx in approved_indices}
@@ -335,7 +335,7 @@ class ApprovalVotingElection(Election[Set[CandidateId]]):
 # Limited Voting System
 ########################################################
 @njit
-def limited_cast_ballot(
+def _limited_cast_ballot(
     voter_vector: np.ndarray, candidate_vectors: np.ndarray, max_choices: int
 ) -> List[CandidateId]:
     ranked_indices = rank_by_distance(voter_vector, candidate_vectors)
@@ -353,7 +353,7 @@ class LimitedVotingElection(Election[List[CandidateId]]):
         self.max_choices = max_choices
 
     def cast_ballot(self, voter_vector: np.ndarray) -> List[CandidateId]:
-        return limited_cast_ballot(
+        return _limited_cast_ballot(
             voter_vector, self.candidates.vectors, self.max_choices
         )
 
