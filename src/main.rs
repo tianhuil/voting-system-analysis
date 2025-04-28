@@ -1,3 +1,4 @@
+use itertools::Itertools;
 use ndarray::{Array1, Array2, Axis};
 use rand::prelude::*;
 use rand_distr::Normal;
@@ -118,10 +119,6 @@ impl Election for FPTPElection {
         candidate_vectors: &Array2<f64>,
         winners: usize,
     ) -> Vec<CandidateId> {
-        if winners != 1 {
-            panic!("FPTP election only supports single winner elections");
-        }
-
         let n_voters = voter_vectors.nrows();
         let mut candidate_ids = vec![0; n_voters];
 
@@ -132,10 +129,7 @@ impl Election for FPTPElection {
         }
 
         // Count votes
-        let mut counts: HashMap<CandidateId, usize> = HashMap::new();
-        for &cid in &candidate_ids {
-            *counts.entry(cid).or_insert(0) += 1;
-        }
+        let counts = candidate_ids.iter().counts();
 
         // Get winners
         let mut count_vec: Vec<_> = counts.into_iter().collect();
@@ -143,7 +137,7 @@ impl Election for FPTPElection {
         count_vec
             .into_iter()
             .take(winners)
-            .map(|(cid, _)| cid)
+            .map(|(cid, _)| *cid)
             .collect()
     }
 }
@@ -233,6 +227,7 @@ impl RCVElection {
                 if count >= majority {
                     winners_vec.push(cid);
                     winner = Some(cid);
+                    active_candidates.remove(&cid); // Only remove the winning candidate
                     break;
                 }
             }
@@ -341,10 +336,7 @@ impl Election for ApprovalVotingElection {
         }
 
         // Count votes
-        let mut counts: HashMap<CandidateId, usize> = HashMap::new();
-        for &cid in &candidate_ids {
-            *counts.entry(cid).or_insert(0) += 1;
-        }
+        let counts = candidate_ids.iter().counts();
 
         // Get winners
         let mut count_vec: Vec<_> = counts.into_iter().collect();
@@ -352,7 +344,7 @@ impl Election for ApprovalVotingElection {
         count_vec
             .into_iter()
             .take(winners)
-            .map(|(cid, _)| cid)
+            .map(|(cid, _)| *cid)
             .collect()
     }
 }
