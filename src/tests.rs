@@ -1,8 +1,8 @@
 use super::{
-    normalize_vectors, rank_by_alignment, ApprovalVotingElection, Candidates, Election,
-    FPTPElection, RCVElection, Voters,
+    rank_by_alignment, ApprovalVotingElection, Candidates, Election, FPTPElection, RCVElection,
+    Voters,
 };
-use ndarray::{Array1, Array2};
+use ndarray::Array2;
 
 /// Creates a Candidates object from a vector of values
 ///
@@ -114,6 +114,64 @@ fn test_rcv_election() {
     let ballot = RCVElection::cast_ballot(&voter_vector, &candidates.vectors);
     assert_eq!(ballot[0].0, 0); // First preference should be candidate 0
     assert_eq!(ballot[0].1, 1); // Rank 1
+}
+
+#[test]
+fn test_rcv_election_open() {
+    // Candidates: 0 = Extreme Left, 1 = Consensus, 2 = Extreme Right
+    let candidates = mock_candidates_from_vec(
+        vec![
+            -1.0, 0.0, // Candidate 0: Extreme Left
+            0.0, 1.0, // Candidate 1: Consensus (centrist)
+            1.0, 0.0, // Candidate 2: Extreme Right
+        ],
+        3,
+        2,
+    );
+
+    // Voters:
+    // Voter 0: Strongly prefers Extreme Left, then Consensus
+    // Voter 1: Strongly prefers Consensus
+    // Voter 2: Strongly prefers Extreme Right, then Consensus
+    let voters = mock_voters_from_vec(
+        vec![
+            -1.0, 0.0, // Left
+            -1.0, 0.0, // Left
+            0.0, 1.0, // Center
+            0.0, 1.0, // Center
+            0.0, 1.0, // Center
+            1.0, 0.0, // Right
+            1.0, 0.0, // Right
+            1.0, 0.0, // Right
+        ],
+        8,
+        2,
+    );
+
+    let result = RCVElection::run_open(&voters.vectors, &candidates.vectors, 1);
+
+    // Check final result
+    assert_eq!(result.winners.len(), 1);
+    assert_eq!(result.winners[0], 1, "Consensus candidate should win");
+
+    // Check rounds
+    assert_eq!(result.rounds.len(), 2, "Should take 2 rounds");
+
+    // First round
+    let round1 = &result.rounds[0];
+    assert_eq!(round1.round_number, 1);
+    assert_eq!(round1.total_votes, 8);
+    assert_eq!(round1.majority_threshold, 5);
+    assert!(round1.winner.is_none());
+    assert!(round1.eliminated.is_some());
+
+    // Second round
+    let round2 = &result.rounds[1];
+    assert_eq!(round2.round_number, 2);
+    assert_eq!(round2.total_votes, 8);
+    assert_eq!(round2.majority_threshold, 5);
+    assert_eq!(round2.winner, Some(1));
+    assert!(round2.eliminated.is_none());
 }
 
 #[test]

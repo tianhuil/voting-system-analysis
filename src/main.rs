@@ -148,6 +148,23 @@ impl Election for FPTPElection {
 /// Ranked Choice Voting
 ////////////////////////////////////////////////////////////
 
+#[derive(Debug)]
+pub struct RCVRoundInfo {
+    pub round_number: usize,
+    pub active_candidates: HashSet<CandidateId>,
+    pub counts: HashMap<CandidateId, usize>,
+    pub total_votes: usize,
+    pub majority_threshold: usize,
+    pub winner: Option<CandidateId>,
+    pub eliminated: Option<CandidateId>,
+}
+
+#[derive(Debug)]
+pub struct RCVResult {
+    pub winners: Vec<CandidateId>,
+    pub rounds: Vec<RCVRoundInfo>,
+}
+
 struct RCVElection;
 
 impl RCVElection {
@@ -161,19 +178,12 @@ impl RCVElection {
             .map(|(rank, (cid, _))| (cid, rank + 1))
             .collect()
     }
-}
 
-impl Election for RCVElection {
-    fn name(&self) -> &'static str {
-        "RCV"
-    }
-
-    fn run(
-        &self,
+    fn run_open(
         voter_vectors: &Array2<f64>,
         candidate_vectors: &Array2<f64>,
         winners: usize,
-    ) -> Vec<CandidateId> {
+    ) -> RCVResult {
         let n_voters = voter_vectors.nrows();
         let n_candidates = candidate_vectors.nrows();
         let mut ballots = vec![vec![(0, 0); n_candidates]; n_voters];
@@ -188,6 +198,8 @@ impl Election for RCVElection {
         let mut active_candidates: HashSet<CandidateId> =
             (0..n_candidates).map(|i| i as i64).collect();
         let mut winners_vec = Vec::with_capacity(winners);
+        let mut rounds = Vec::new();
+        let mut round_number = 1;
 
         while winners_vec.len() < winners && !active_candidates.is_empty() {
             // Count first preferences
@@ -205,29 +217,64 @@ impl Election for RCVElection {
             let total_votes: usize = counts.values().sum();
             let majority = total_votes / 2 + 1;
 
+            let mut winner = None;
             let mut eliminated = None;
+
+            // Check for majority winner
             for (&cid, &count) in &counts {
                 if count >= majority {
                     winners_vec.push(cid);
                     active_candidates.remove(&cid);
-                    eliminated = Some(cid);
+                    winner = Some(cid);
                     break;
                 }
             }
 
-            if eliminated.is_none() {
-                // Eliminate last place
+            // If no winner, eliminate last place
+            if winner.is_none() {
                 let min_count = counts.values().min().unwrap_or(&0);
                 for (&cid, &count) in &counts {
                     if count == *min_count {
                         active_candidates.remove(&cid);
+                        eliminated = Some(cid);
                         break;
                     }
                 }
             }
+
+            // Record round information
+            rounds.push(RCVRoundInfo {
+                round_number,
+                active_candidates: active_candidates.clone(),
+                counts,
+                total_votes,
+                majority_threshold: majority,
+                winner,
+                eliminated,
+            });
+
+            round_number += 1;
         }
 
-        winners_vec
+        RCVResult {
+            winners: winners_vec,
+            rounds,
+        }
+    }
+}
+
+impl Election for RCVElection {
+    fn name(&self) -> &'static str {
+        "RCV"
+    }
+
+    fn run(
+        &self,
+        voter_vectors: &Array2<f64>,
+        candidate_vectors: &Array2<f64>,
+        winners: usize,
+    ) -> Vec<CandidateId> {
+        Self::run_open(voter_vectors, candidate_vectors, winners).winners
     }
 }
 
