@@ -138,6 +138,18 @@ def _fptp_cast_ballot(
     return int(ranked_indices[0])
 
 
+@njit
+def _fptp_run(
+    voter_vectors: np.ndarray, candidate_vectors: np.ndarray, winners: int
+) -> np.ndarray:
+    n_voters = voter_vectors.shape[0]
+    candidate_ids = np.zeros(n_voters, dtype=np.int64)
+    for i in range(n_voters):
+        candidate_ids[i] = _fptp_cast_ballot(voter_vectors[i], candidate_vectors)
+    winner_counts = count_occurrences(candidate_ids)
+    return np.array([cid for cid, _ in winner_counts[:winners]], dtype=np.int64)
+
+
 class FPTPElection(Election[CandidateId]):
     name: str = "FPTP"
 
@@ -145,11 +157,8 @@ class FPTPElection(Election[CandidateId]):
         return _fptp_cast_ballot(voter_vector, self.candidates.vectors)
 
     def run(self, voters: Voters) -> List[CandidateId]:
-        candidate_ids = [
-            self.cast_ballot(voters.vectors[i]) for i in range(len(voters.vectors))
-        ]
-        winner_counts = count_occurrences(candidate_ids)
-        return [cid for cid, _ in winner_counts[: self.winners]]
+        winners = _fptp_run(voters.vectors, self.candidates.vectors, self.winners)
+        return [int(cid) for cid in winners]
 
 
 ########################################################
@@ -306,6 +315,29 @@ def _approval_cast_ballot(
     return ranked_indices[:approved_count]
 
 
+@njit
+def _approval_run(
+    voter_vectors: np.ndarray,
+    candidate_vectors: np.ndarray,
+    winners: int,
+    cutoff: float,
+) -> np.ndarray:
+    n_voters = voter_vectors.shape[0]
+    n_candidates = candidate_vectors.shape[0]
+    candidate_ids = np.zeros(n_voters * n_candidates, dtype=np.int64)
+    idx = 0
+    for i in range(n_voters):
+        approved_indices = _approval_cast_ballot(
+            voter_vectors[i], candidate_vectors, cutoff
+        )
+        for j in range(len(approved_indices)):
+            candidate_ids[idx] = int(approved_indices[j])
+            idx += 1
+    candidate_ids = candidate_ids[:idx]  # Trim to actual size
+    winner_counts = count_occurrences(candidate_ids)
+    return np.array([cid for cid, _ in winner_counts[:winners]], dtype=np.int64)
+
+
 class ApprovalVotingElection(Election[Set[CandidateId]]):
     """Approval voting uses same counting as FPTP but different ballots"""
 
@@ -322,13 +354,10 @@ class ApprovalVotingElection(Election[Set[CandidateId]]):
         return {int(idx) for idx in approved_indices}
 
     def run(self, voters: Voters) -> List[CandidateId]:
-        candidate_ids = [
-            candidate_id
-            for i in range(len(voters.vectors))
-            for candidate_id in self.cast_ballot(voters.vectors[i])
-        ]
-        winner_counts = count_occurrences(candidate_ids)
-        return [cid for cid, _ in winner_counts[: self.winners]]
+        winners = _approval_run(
+            voters.vectors, self.candidates.vectors, self.winners, self.cutoff
+        )
+        return [int(cid) for cid in winners]
 
 
 ########################################################
@@ -341,6 +370,26 @@ def _limited_cast_ballot(
     ranked_indices = rank_by_distance(voter_vector, candidate_vectors)
     chosen = ranked_indices[:max_choices]
     return [int(idx) for idx in chosen]
+
+
+@njit
+def _limited_run(
+    voter_vectors: np.ndarray,
+    candidate_vectors: np.ndarray,
+    winners: int,
+    max_choices: int,
+) -> np.ndarray:
+    n_voters = voter_vectors.shape[0]
+    candidate_ids = np.zeros(n_voters * max_choices, dtype=np.int64)
+    idx = 0
+    for i in range(n_voters):
+        chosen = _limited_cast_ballot(voter_vectors[i], candidate_vectors, max_choices)
+        for j in range(len(chosen)):
+            candidate_ids[idx] = int(chosen[j])
+            idx += 1
+    candidate_ids = candidate_ids[:idx]  # Trim to actual size
+    winner_counts = count_occurrences(candidate_ids)
+    return np.array([cid for cid, _ in winner_counts[:winners]], dtype=np.int64)
 
 
 class LimitedVotingElection(Election[List[CandidateId]]):
@@ -358,13 +407,10 @@ class LimitedVotingElection(Election[List[CandidateId]]):
         )
 
     def run(self, voters: Voters) -> List[CandidateId]:
-        candidate_ids = [
-            candidate_id
-            for i in range(len(voters.vectors))
-            for candidate_id in self.cast_ballot(voters.vectors[i])
-        ]
-        winner_counts = count_occurrences(candidate_ids)
-        return [cid for cid, _ in winner_counts[: self.winners]]
+        winners = _limited_run(
+            voters.vectors, self.candidates.vectors, self.winners, self.max_choices
+        )
+        return [int(cid) for cid in winners]
 
 
 def run_single_winner_election(
