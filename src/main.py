@@ -109,10 +109,7 @@ def rank_by_distance(
 ########################################################
 
 
-FPTPBallot = CandidateId
-
-
-class FPTPElection(Election[FPTPBallot]):
+class FPTPElection(Election[Ballot[CandidateId]]):
     name: str = "FPTP"
 
     def cast_ballot(
@@ -140,15 +137,12 @@ class FPTPElection(Election[FPTPBallot]):
 ########################################################
 
 
-RankedBallot = Dict[CandidateId, int]
-
-
-class RCVElection(Election[RankedBallot]):
+class RCVElection(Election[Dict[CandidateId, int]]):
     name: str = "RCV"
 
     def cast_ballot(
         self, voter_id: VoterId, voter_vector: np.ndarray
-    ) -> Ballot[RankedBallot]:
+    ) -> Ballot[Dict[CandidateId, int]]:
         """RCV/STV voter with preferences"""
         ranked_indices = rank_by_distance(voter_vector, self.candidates.vectors)
         return Ballot(
@@ -296,10 +290,7 @@ class STVElection(RCVElection):
 ########################################################
 
 
-ApprovalBallot = Set[CandidateId]
-
-
-class ApprovalVotingElection(Election[ApprovalBallot]):
+class ApprovalVotingElection(Election[Set[CandidateId]]):
     """Approval voting uses same counting as FPTP but different ballots"""
 
     name: str = "APPROVAL"
@@ -310,7 +301,7 @@ class ApprovalVotingElection(Election[ApprovalBallot]):
 
     def cast_ballot(
         self, voter_id: VoterId, voter_vector: np.ndarray
-    ) -> Ballot[ApprovalBallot]:
+    ) -> Ballot[Set[CandidateId]]:
         """Approval voter that chooses the closest candidates up to cutoff"""
         ranked_indices = rank_by_distance(voter_vector, self.candidates.vectors)
         approved_count = int(len(ranked_indices) * self.cutoff)
@@ -335,11 +326,7 @@ class ApprovalVotingElection(Election[ApprovalBallot]):
 ########################################################
 # Limited Voting System
 ########################################################
-
-LimitedBallot = List[CandidateId]
-
-
-class LimitedVotingElection(Election[LimitedBallot]):
+class LimitedVotingElection(Election[List[CandidateId]]):
     """Limited Voting: Each voter can vote for up to k candidates"""
 
     name: str = "LIMITED"
@@ -350,13 +337,13 @@ class LimitedVotingElection(Election[LimitedBallot]):
 
     def cast_ballot(
         self, voter_id: VoterId, voter_vector: np.ndarray
-    ) -> Ballot[Set[CandidateId]]:
+    ) -> Ballot[List[CandidateId]]:
         """Limited voter that selects up to max_choices candidates"""
         ranked_indices = rank_by_distance(voter_vector, self.candidates.vectors)
         chosen = ranked_indices[: self.max_choices]
         return Ballot(
             voter_id=voter_id,
-            data={int(idx) for idx in chosen},
+            data=[int(idx) for idx in chosen],
         )
 
     def run(self, voters: Voters) -> List[CandidateId]:
