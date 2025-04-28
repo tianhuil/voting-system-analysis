@@ -17,6 +17,7 @@
     "linalg",
     "ndarray",
     "njit",
+    "numba",
     "numpy",
     "prange",
     "setuptools"
