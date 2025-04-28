@@ -177,33 +177,16 @@ fn test_rcv_election_open() {
 
     // Check vote counts in first round
     assert_eq!(
-        round1.counts.get(&0),
-        Some(&2),
-        "Left should have 2 votes in round 1"
-    );
-    assert_eq!(
-        round1.counts.get(&1),
-        Some(&3),
-        "Center should have 3 votes in round 1"
-    );
-    assert_eq!(
-        round1.counts.get(&2),
-        Some(&3),
-        "Right should have 3 votes in round 1"
+        round1.counts,
+        [(0, 2), (1, 3), (2, 3)].into_iter().collect(),
+        "Round 1 should have Left: 2 votes, Center: 3 votes, Right: 3 votes"
     );
 
     // Verify active candidates in first round
-    assert!(
-        !round1.active_candidates.contains(&0),
-        "Left should not be active in round 1"
-    );
-    assert!(
-        round1.active_candidates.contains(&1),
-        "Center should be active in round 1"
-    );
-    assert!(
-        round1.active_candidates.contains(&2),
-        "Right should be active in round 1"
+    assert_eq!(
+        round1.active_candidates,
+        vec![1, 2].into_iter().collect(),
+        "All candidates should be active in round 1"
     );
 
     // Verify which candidate was eliminated
@@ -223,33 +206,16 @@ fn test_rcv_election_open() {
 
     // Check vote counts in second round
     assert_eq!(
-        round2.counts.get(&0),
-        None,
-        "Left should not be in counts in round 2"
-    );
-    assert_eq!(
-        round2.counts.get(&1),
-        Some(&5),
-        "Center should have 5 votes in round 2 (including transfers)"
-    );
-    assert_eq!(
-        round2.counts.get(&2),
-        Some(&3),
-        "Right should still have 3 votes in round 2"
+        round2.counts,
+        [(1, 5), (2, 3)].into_iter().collect(),
+        "Only Center and Right should have votes in round 2"
     );
 
     // Verify active candidates in second round
-    assert!(
-        !round2.active_candidates.contains(&0),
-        "Left should not be active in round 2"
-    );
-    assert!(
-        !round2.active_candidates.contains(&1),
-        "Center should not be active in round 2 (already won)"
-    );
-    assert!(
-        round2.active_candidates.contains(&2),
-        "Right should be active in round 2"
+    assert_eq!(
+        round2.active_candidates,
+        vec![2].into_iter().collect(),
+        "Only Right should be active in round 2"
     );
 }
 
