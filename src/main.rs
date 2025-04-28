@@ -2,6 +2,7 @@ use ndarray::{Array1, Array2};
 use num::Float;
 use rand::prelude::*;
 use rand_distr::Normal;
+use rayon::prelude::*;
 use std::collections::{HashMap, HashSet};
 
 type CandidateId = i64;
@@ -277,7 +278,7 @@ impl Election for ApprovalVotingElection {
     }
 }
 
-fn run_single_winner_election<E: Election>(
+fn run_single_winner_election<E: Election + Sync>(
     election: &E,
     candidates: &Candidates,
     true_voters: &Voters,
@@ -285,7 +286,7 @@ fn run_single_winner_election<E: Election>(
 ) -> f64 {
     let true_winner = election.run(&true_voters.vectors, &candidates.vectors, 1)[0];
     let matches: f64 = perturbed_voters
-        .iter()
+        .par_iter()
         .map(|voters| {
             let winner = election.run(&voters.vectors, &candidates.vectors, 1)[0];
             if winner == true_winner {
