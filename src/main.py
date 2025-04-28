@@ -144,7 +144,7 @@ def _fptp_run(
 ) -> np.ndarray:
     n_voters = voter_vectors.shape[0]
     candidate_ids = np.zeros(n_voters, dtype=np.int64)
-    for i in range(n_voters):
+    for i in prange(n_voters):
         candidate_ids[i] = _fptp_cast_ballot(voter_vectors[i], candidate_vectors)
     winner_counts = count_occurrences(candidate_ids)
     return np.array([cid for cid, _ in winner_counts[:winners]], dtype=np.int64)
@@ -326,7 +326,7 @@ def _approval_run(
     n_candidates = candidate_vectors.shape[0]
     candidate_ids = np.zeros(n_voters * n_candidates, dtype=np.int64)
     idx = 0
-    for i in range(n_voters):
+    for i in prange(n_voters):
         approved_indices = _approval_cast_ballot(
             voter_vectors[i], candidate_vectors, cutoff
         )
@@ -382,7 +382,7 @@ def _limited_run(
     n_voters = voter_vectors.shape[0]
     candidate_ids = np.zeros(n_voters * max_choices, dtype=np.int64)
     idx = 0
-    for i in range(n_voters):
+    for i in prange(n_voters):
         chosen = _limited_cast_ballot(voter_vectors[i], candidate_vectors, max_choices)
         for j in range(len(chosen)):
             candidate_ids[idx] = int(chosen[j])
