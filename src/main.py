@@ -99,7 +99,7 @@ def rank_by_distance(
     """
     n_candidates = candidate_vectors.shape[0]
     distances = np.zeros(n_candidates)
-    for i in range(n_candidates):
+    for i in prange(n_candidates):
         distances[i] = np.linalg.norm(voter_vector - candidate_vectors[i])
     return np.argsort(distances)
 
