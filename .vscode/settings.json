@@ -11,12 +11,16 @@
     "editor.defaultFormatter": "ms-python.black-formatter"
   },
   "cSpell.words": [
+    "argmin",
     "FPTP",
+    "inplace",
     "isort",
     "jitclass",
     "linalg",
+    "mapv",
     "ndarray",
     "njit",
+    "nrows",
     "numba",
     "numpy",
     "prange",
